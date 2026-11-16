@@ -1,0 +1,42 @@
+services:
+
+  backend:
+    image: redsocial
+    container_name: usuario-api
+    build:
+      context: ./Tarea4-Red Social grupo777
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT}:8080"
+    environment:
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - red-social
+
+  postgres:
+    container_name: usuario-db
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - datos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - red-social
+
+volumes:
+  datos-postgres:
+
+networks:
+  red-social:
+    driver: bridge
