@@ -96,19 +96,6 @@ public class AuthController : ControllerBase
 
         // Cerrar la cookie temporal
         await HttpContext.SignOutAsync("External");
-
-        return Ok(new
-        {
-            mensaje = "Autenticación exitosa.",
-            usuario = new
-            {
-                usuario.Id,
-                usuario.User,
-                usuario.email,
-                usuario.Biografia,
-                usuario.Fecha,
-                usuario.Estado
-            }
-        });
+        return Redirect("http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html");
     }
 }

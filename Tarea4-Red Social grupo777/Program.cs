@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.WebUtilities;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -21,8 +22,19 @@ builder.Services.AddAuthentication(options =>
 {
     options.ClientId = builder.Configuration["Google:ClientId"]!;
     options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
-
     options.SignInScheme = "External";
+     options.Events.OnRedirectToAuthorizationEndpoint = context =>
+    {
+        var url = QueryHelpers.AddQueryString(
+            context.RedirectUri,
+            "prompt",
+            "select_account"
+        );
+
+        context.Response.Redirect(url);
+
+        return Task.CompletedTask;
+    };
 });
 
 var app = builder.Build();
