@@ -40,6 +40,10 @@ namespace Tarea4.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("GoogleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("User")
                         .IsRequired()
                         .HasColumnType("text");

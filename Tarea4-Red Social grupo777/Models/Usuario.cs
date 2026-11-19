@@ -8,6 +8,6 @@ public class Usuario
     public string Biografia {get;set;}
     public string Fecha {get;set;}
     public string Estado {get;set;}
-
+    public string   GoogleId {get;set;}
     
 }
