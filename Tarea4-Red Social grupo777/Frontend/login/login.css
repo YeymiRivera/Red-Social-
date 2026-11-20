@@ -61,7 +61,29 @@ body {
     width: 20px;
     height: 20px;
 }
+#githubLogin {
+    width: 100%;
+    margin-top: 30px;
+    padding: 13px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
 
+#githubLogin:hover {
+    background: #f7f7f7;
+}
+
+#githubLogin img {
+    width: 20px;
+    height: 20px;
+}
 .informacion {
     margin-top: 25px;
     font-size: 12px;

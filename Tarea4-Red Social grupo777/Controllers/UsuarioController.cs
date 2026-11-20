@@ -116,4 +116,14 @@ public class UsuarioController : ControllerBase
 
         return Ok("La cuenta ha sido desactivada correctamente.");
     }
+[HttpGet]
+public async Task<ActionResult<IEnumerable<Usuario>>> GetPersona()
+{
+    var token = HttpContext.Session.GetString("GitHubToken");
+
+    if (token == null)
+        return Unauthorized("No hay token guardado");
+
+    return await _context.Usuarios.ToListAsync();
+}
 }
