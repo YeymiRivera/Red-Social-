@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddDbContext<Context>(options => options.UseNpgsql(
     builder.Configuration.GetConnectionString("Context")));
+builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 
@@ -36,17 +37,21 @@ builder.Services.AddAuthentication(options =>
         return Task.CompletedTask;
     };
 });
-
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession();
+builder.Services.AddOptions<ScalarOptions>().BindConfiguration("Scalar");
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    app.UseStaticFiles();
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
 if(app.Environment.IsProduction())
 {
+    app.UseStaticFiles();
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
@@ -58,6 +63,7 @@ using (var scope = app.Services.CreateScope())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSession();
 app.MapControllers();
 app.Run();
 
