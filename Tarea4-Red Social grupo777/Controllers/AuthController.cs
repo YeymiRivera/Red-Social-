@@ -75,7 +75,7 @@ public class AuthController : ControllerBase
         // Buscar usuario en PostgreSQL
         var consulta =
             from u in _context.Usuarios
-            where u.GoogleId == googleId
+            where u.email == googleId
             select u;
 
         var usuario = await consulta.FirstOrDefaultAsync();
@@ -90,7 +90,6 @@ public class AuthController : ControllerBase
                 Biografia = "",
                 Fecha = DateTime.UtcNow.ToString("O"),
                 Estado = "Activo",
-                GoogleId = googleId
             };
 
             _context.Usuarios.Add(usuario);
