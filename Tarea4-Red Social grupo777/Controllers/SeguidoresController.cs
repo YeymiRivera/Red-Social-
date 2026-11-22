@@ -63,7 +63,7 @@ public class SeguidoresController : ControllerBase
         return Ok(seguidor);
     }
      [HttpPost("Crear")]
-    public async Task<IActionResult> Seguir(int usuarioSeguidorId, int usuarioSeguidoId)
+    public async Task<IActionResult> Registrar(int usuarioSeguidorId, int usuarioSeguidoId)
     {
         bool existe = await (
             from s in _context.Seguidores
