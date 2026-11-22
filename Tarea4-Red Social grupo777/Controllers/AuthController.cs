@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Net.Http.Headers;
+using System.Text.Json;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -51,6 +53,7 @@ public class AuthController : ControllerBase
                 mensaje = "No se pudo autenticar con Google."
             });
         }
+        ;
 
         var identidad = resultado.Principal;
 
@@ -71,19 +74,16 @@ public class AuthController : ControllerBase
                 mensaje = "Google no proporcionó los datos necesarios."
             });
         }
+        ;
 
         // Buscar usuario en PostgreSQL
-        var consulta =
-            from u in _context.Usuarios
-            where u.email == googleId
-            select u;
-
-        var usuario = await consulta.FirstOrDefaultAsync();
-
-        // Registrar si todavía no existe
-        if (usuario == null)
+        var consulta = await (
+            from u in _context.CuentasExternas
+            where u.ProveedorId == googleId
+            select u).FirstOrDefaultAsync();
+        if (consulta == null)
         {
-            usuario = new Usuario
+            Usuario usuario = new Usuario
             {
                 User = nombre ?? email.Split('@')[0],
                 email = email,
@@ -91,12 +91,18 @@ public class AuthController : ControllerBase
                 Fecha = DateTime.UtcNow.ToString("O"),
                 Estado = "Activo",
             };
-
             _context.Usuarios.Add(usuario);
-
+            await _context.SaveChangesAsync();
+            var cuentaExterna = new CuentaExterna
+            {
+                ProveedorId = googleId,
+                Proveedor = "Google",
+                UsuarioId = usuario.Id
+            };
+            _context.CuentasExternas.Add(cuentaExterna);
             await _context.SaveChangesAsync();
         }
-
+        ;
         // Cerrar la cookie temporal
         await HttpContext.SignOutAsync("External");
         return Redirect("http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html");
@@ -111,7 +117,7 @@ public class AuthController : ControllerBase
         var url = "https://github.com/login/oauth/authorize" +
         $"?client_id={clientId}" +
         $"&redirect_uri={redirectUri}" +
-        $"&scope=user";
+        $"&scope=read:user%20user:email";
         return Redirect(url);
     }
     [HttpGet("callback")]
@@ -121,49 +127,120 @@ public class AuthController : ControllerBase
         var clientSecret = _configuration["GitHub:ClientSecret"];
 
         var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Accept.Add(
+    new MediaTypeWithQualityHeaderValue("application/json")
+    );
 
-        var response = await client.PostAsync(
-        "https://github.com/login/oauth/access_token",
-        new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["client_id"] = clientId,
-            ["client_secret"] = clientSecret,
-            ["code"] = code
-        })
+        // 1. Solicitar el access token a GitHub
+        var respuestaToken = await client.PostAsync(
+            "https://github.com/login/oauth/access_token",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId!,
+                ["client_secret"] = clientSecret!,
+                ["code"] = code
+            })
         );
 
-        var body = await response.Content.ReadAsStringAsync();
+        if (!respuestaToken.IsSuccessStatusCode)
+            return Unauthorized("No se pudo obtener el token de GitHub.");
 
-        var token = body
-        .Split('&')
-        .First(x => x.StartsWith("access_token="))
-        .Replace("access_token=", "");
+        var contenidoToken = await respuestaToken.Content.ReadAsStringAsync();
+        Console.WriteLine(contenidoToken);
 
-        HttpContext.Session.SetString("GitHubToken", token);
-        return Redirect("http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html");
-    }
-    [HttpGet("EstaAutenticado")]
-    public async Task<IActionResult> VerificarToken()
-    {
-        var token = HttpContext.Session.GetString("GitHubToken");
+        var documentoToken = JsonDocument.Parse(contenidoToken);
 
-        if (token == null)
-            return Unauthorized("No hay token guardado");
+        var token = documentoToken.RootElement
+            .GetProperty("access_token").GetString();
 
-        var client = _httpClientFactory.CreateClient();
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-        client.DefaultRequestHeaders.Add("User-Agent", "OAuth-Demo");
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized("GitHub no proporcionó un token.");
 
-        var response = await client.GetAsync("https://api.github.com/user");
+        // 2. Consultar información del usuario en GitHub
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
 
-        if (!response.IsSuccessStatusCode)
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("RedSocialApp");
+
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/vnd.github+json")
+        );
+
+        var respuestaUsuario = await client.GetAsync(
+            "https://api.github.com/user"
+        );
+
+        if (!respuestaUsuario.IsSuccessStatusCode)
+            return Unauthorized("No se pudo obtener el perfil de GitHub.");
+
+        var contenidoUsuario = await respuestaUsuario.Content.ReadAsStringAsync();
+
+        var documento = JsonDocument.Parse(contenidoUsuario);
+
+        var root = documento.RootElement;
+        // 3. Extraer información del perfil
+        var githubId = root.GetProperty("id").GetInt64().ToString();
+
+        var username = root.GetProperty("login").GetString();
+
+        var nombre = root.TryGetProperty("name", out var nombreJson)
+            ? nombreJson.GetString()
+            : null;
+
+        var email = root.TryGetProperty("email", out var emailJson)
+            ? emailJson.GetString()
+            : null;
+
+        var biografia = root.TryGetProperty("bio", out var bioJson)
+            ? bioJson.GetString()
+            : null;
+
+        // 4. Buscar la cuenta externa
+        var consulta = await (
+            from c in _context.CuentasExternas
+            where c.ProveedorId == githubId
+               && c.Proveedor == "GitHub"
+            select c
+        ).FirstOrDefaultAsync();
+
+        Usuario usuario;
+
+        if (consulta == null)
         {
-            // Token inválido o revocado
-            HttpContext.Session.Remove("GitHubToken");
-            return Unauthorized("Token inválido o revocado");
-        }
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return BadRequest(
+                    "GitHub no proporcionó un correo. Verifica los permisos user:email."
+                );
+            }
+            // 5. Crear usuario local
+            usuario = new Usuario
+            {
+                User = username ?? "UsuarioGitHub",
+                email = email,
+                Biografia = biografia ?? "",
+                Fecha = DateTime.UtcNow.ToString("O"),
+                Estado = "Activo"
+            };
 
-        var userJson = await response.Content.ReadAsStringAsync();
-        return Ok(userJson);
+            _context.Usuarios.Add(usuario);
+
+            await _context.SaveChangesAsync();
+
+            // 6. Crear relación con GitHub
+            var cuentaExterna = new CuentaExterna
+            {
+                UsuarioId = usuario.Id,
+                Proveedor = "GitHub",
+                ProveedorId = githubId
+            };
+            _context.CuentasExternas.Add(cuentaExterna);
+
+            await _context.SaveChangesAsync();
+        }
+        ;
+        return Redirect(
+            "http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html"
+        );
     }
 }
