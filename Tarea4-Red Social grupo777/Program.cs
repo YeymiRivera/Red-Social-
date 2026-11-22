@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
@@ -8,24 +7,11 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.WebUtilities;
 var builder = WebApplication.CreateBuilder(args);
 
+// Add services to the container.
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddDbContext<Context>(options => options.UseNpgsql(
     builder.Configuration.GetConnectionString("Context")));
 builder.Services.AddHttpClient();
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.Cookie.Name = "RedSocialAuth";
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Events.OnRedirectToLogin = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        };
-    });
-builder.Services.AddAuthorization();
-builder.Services.AddOpenApi();
-builder.Services.AddControllers();
-
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
 builder.Services.AddAuthentication(
@@ -89,6 +75,7 @@ builder.Services.AddSession();
 builder.Services.AddOptions<ScalarOptions>().BindConfiguration("Scalar");
 var app = builder.Build();
 
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseStaticFiles();
@@ -101,13 +88,11 @@ if(app.Environment.IsProduction())
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
-
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<Context>();
     db.Database.Migrate();
-}
-
+}   
 app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseRouting();
@@ -117,3 +102,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
+
+
