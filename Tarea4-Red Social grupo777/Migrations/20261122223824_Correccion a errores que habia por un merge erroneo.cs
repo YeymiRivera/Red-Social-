@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Tarea4.Migrations
 {
     /// <inheritdoc />
-    public partial class AgregarTablasGerson : Migration
+    public partial class Correccionaerroresquehabiaporunmergeerroneo : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
