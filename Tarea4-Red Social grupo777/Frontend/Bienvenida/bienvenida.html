@@ -1,0 +1,81 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi perfil - Red Social</title>
+    <link rel="stylesheet" href="styles.css">
+<body>
+
+    <header class="navbar">
+        <h2>Red Social</h2>
+        <button class="btn-salir" onclick="cerrarVista()">Cerrar</button>
+    </header>
+
+    <main class="perfil-container">
+
+        <section class="perfil-header">
+            <div class="avatar" id="avatar">Y</div>
+
+            <div>
+                <h1 id="nombreTitulo">Mi perfil</h1>
+                <p>Administra tu información personal</p>
+            </div>
+
+            <span class="estado" id="estado">Activo</span>
+        </section>
+
+        <section class="perfil-card">
+
+            <div class="card-title">
+                <h2>Información personal</h2>
+                <p>Puedes editar visualmente tus datos.</p>
+            </div>
+
+            <form id="formPerfil">
+
+
+                <div class="campo">
+                    <label for="nombre">Nombre de usuario</label>
+                    <input type="text" id="nombre" required>
+                </div>
+
+                <div class="campo">
+                    <label for="email">Correo electrónico</label>
+                    <input type="email" id="email" disabled>
+                </div>
+
+                <div class="campo">
+                    <label for="biografia">Biografía</label>
+                    <textarea id="biografia" rows="4"
+                        placeholder="Cuéntanos algo sobre ti..."></textarea>
+                </div>
+
+                <div class="campo">
+                    <label for="fecha">Fecha de registro</label>
+                    <input type="text" id="fecha" disabled>
+                </div>
+
+                <div class="acciones">
+                    <button type="button" class="btn-secundario"
+                        id="restablecer">
+                        Restablecer
+                    </button>
+
+                    <button type="submit" class="btn-guardar">
+                        Guardar cambios
+                    </button>
+                </div>
+
+            </form>
+
+            <p id="mensaje" class="mensaje"></p>
+
+        </section>
+
+    </main>
+
+    <script src="perfil.js"></script>
+</body>
+</html>

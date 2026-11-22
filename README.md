@@ -138,3 +138,17 @@ Para comprobar el funcionamiento del proyecto:
 4. Probar las operaciones CRUD de usuarios.
 5. Reiniciar los contenedores y comprobar que los datos continúan almacenados en PostgreSQL.
 6. Verificar el despliegue utilizando la imagen previamente construida.
+
+##Tablas
+
+Yeymi Miguel Rivera Castillo
+Usuarios
+Seguidores
+Usuarios/Publicaciones
+Usuario/sesion
+##Metodos de sesion
+Yeymi Miguel Rivera Castillo
+Google
+Github
+
+
