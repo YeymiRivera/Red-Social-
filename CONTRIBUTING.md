@@ -164,7 +164,7 @@ Para enviar la contribución al repositorio original:
 2. Seleccionar la opción **Contribute** o **Compare & pull request**.
 3. Configurar el Pull Request de la siguiente manera:
    - **Base repository:** repositorio original del líder.
-   - **Base branch:** `main`.
+   - **Base branch:** `develop`.
    - **Head repository:** Fork personal del integrante.
    - **Compare branch:** rama de trabajo creada por el integrante.
 4. Escribir un título descriptivo.
