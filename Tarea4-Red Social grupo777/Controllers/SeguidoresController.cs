@@ -62,4 +62,25 @@ public class SeguidoresController : ControllerBase
 
         return Ok(seguidor);
     }
+     [HttpPost("Crear")]
+    public async Task<IActionResult> Seguir(int usuarioSeguidorId, int usuarioSeguidoId)
+    {
+        bool existe = await (
+            from s in _context.Seguidores
+            where s.UsuarioSeguidorId == usuarioSeguidorId && s.UsuarioSeguidoId == usuarioSeguidoId
+            select s
+        ).AnyAsync();
+
+        if (existe)
+            return Conflict("El nombre de usuario ya existe.");
+
+        Seguidores seguidor = new Seguidores();
+        seguidor.UsuarioSeguidorId = usuarioSeguidorId;
+        seguidor.UsuarioSeguidoId = usuarioSeguidoId;
+        _context.Seguidores.Add(seguidor);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(seguidor);
+    }
 }
