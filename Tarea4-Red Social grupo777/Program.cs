@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.WebUtilities;
@@ -12,11 +14,30 @@ builder.Services.AddDbContext<Context>(options => options.UseNpgsql(
 builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
-
-builder.Services.AddAuthentication(options =>
+builder.Services.AddAuthentication(
+    CookieAuthenticationDefaults.AuthenticationScheme
+)
+.AddCookie(options =>
 {
-    options.DefaultScheme = "External";
-    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+    options.Cookie.Name = "RedSocial.Auth";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+
+    options.ExpireTimeSpan = TimeSpan.FromHours(2);
+    options.SlidingExpiration = true;
+
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
 })
 .AddCookie("External")
 .AddGoogle(options =>
@@ -24,7 +45,8 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = builder.Configuration["Google:ClientId"]!;
     options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
     options.SignInScheme = "External";
-     options.Events.OnRedirectToAuthorizationEndpoint = context =>
+
+    options.Events.OnRedirectToAuthorizationEndpoint = context =>
     {
         var url = QueryHelpers.AddQueryString(
             context.RedirectUri,
@@ -33,9 +55,20 @@ builder.Services.AddAuthentication(options =>
         );
 
         context.Response.Redirect(url);
-
         return Task.CompletedTask;
     };
+});
+
+builder.Services.AddAuthorization();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5500")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
 });
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession();
@@ -60,10 +93,13 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<Context>();
     db.Database.Migrate();
 }   
+app.UseStaticFiles();
 app.UseHttpsRedirection();
+app.UseRouting();
+app.UseCors("Frontend");
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseSession();
 app.MapControllers();
 app.Run();
 
