@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -78,31 +79,68 @@ public class AuthController : ControllerBase
 
         // Buscar usuario en PostgreSQL
         var consulta = await (
-            from u in _context.CuentasExternas
-            where u.ProveedorId == googleId
-            select u).FirstOrDefaultAsync();
+     from c in _context.CuentasExternas
+     where c.ProveedorId == googleId
+        && c.Proveedor == "Google"
+     select c
+ ).FirstOrDefaultAsync();
+
+        Usuario usuario;
+
         if (consulta == null)
         {
-            Usuario usuario = new Usuario
+            usuario = new Usuario
             {
                 User = nombre ?? email.Split('@')[0],
                 email = email,
                 Biografia = "",
                 Fecha = DateTime.UtcNow.ToString("O"),
-                Estado = "Activo",
+                Estado = "Activo"
             };
+
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
+
             var cuentaExterna = new CuentaExterna
             {
                 ProveedorId = googleId,
                 Proveedor = "Google",
                 UsuarioId = usuario.Id
             };
+
             _context.CuentasExternas.Add(cuentaExterna);
             await _context.SaveChangesAsync();
         }
-        ;
+        else
+        {
+            usuario = await _context.Usuarios.FindAsync(consulta.UsuarioId);
+
+            if (usuario == null)
+            {
+                return Unauthorized("No se encontró el usuario local.");
+            }
+        }
+
+        // Generar la cookie de autenticación
+        var claims = new List<Claim>
+        {
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+        new Claim(ClaimTypes.Name, usuario.User),
+        new Claim(ClaimTypes.Email, usuario.email)
+        };
+
+        var identidadclaim = new ClaimsIdentity(
+            claims,
+            CookieAuthenticationDefaults.AuthenticationScheme
+        );
+
+        var principal = new ClaimsPrincipal(identidadclaim);
+
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principal
+        );
+        Console.WriteLine("Usuario autenticado: " +User.Identity?.IsAuthenticated);
         // Cerrar la cookie temporal
         await HttpContext.SignOutAsync("External");
         return Redirect("http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html");
@@ -146,7 +184,6 @@ public class AuthController : ControllerBase
             return Unauthorized("No se pudo obtener el token de GitHub.");
 
         var contenidoToken = await respuestaToken.Content.ReadAsStringAsync();
-        Console.WriteLine(contenidoToken);
 
         var documentoToken = JsonDocument.Parse(contenidoToken);
 
@@ -226,7 +263,6 @@ public class AuthController : ControllerBase
             _context.Usuarios.Add(usuario);
 
             await _context.SaveChangesAsync();
-
             // 6. Crear relación con GitHub
             var cuentaExterna = new CuentaExterna
             {
@@ -238,7 +274,40 @@ public class AuthController : ControllerBase
 
             await _context.SaveChangesAsync();
         }
-        ;
+        else
+        {
+            usuario = await _context.Usuarios.FindAsync(consulta.UsuarioId);
+
+            if (usuario == null)
+                return Unauthorized("No se encontró el usuario local.");
+        }
+        var claims = new List<Claim>
+            {
+            new Claim(
+                ClaimTypes.NameIdentifier,
+                usuario.Id.ToString()
+            ),
+            new Claim(
+                ClaimTypes.Name,
+                usuario.User
+            ),
+            new Claim(
+                ClaimTypes.Email,
+                usuario.email)
+            };
+
+            var identidadclaim = new ClaimsIdentity(
+                claims,
+                CookieAuthenticationDefaults.AuthenticationScheme
+            );
+
+            var principal = new ClaimsPrincipal(identidadclaim);
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                principal
+            );
+            Console.WriteLine("Usuario autenticado: " +User.Identity?.IsAuthenticated);
         return Redirect(
             "http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html"
         );
