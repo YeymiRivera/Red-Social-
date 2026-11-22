@@ -20,6 +20,7 @@ public class UsuarioController : ControllerBase
     {
         var usuarios = await (
             from u in _context.Usuarios
+            where u.Estado == "Activo"
             select u
         ).ToListAsync();
 
@@ -95,5 +96,25 @@ public class UsuarioController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(usuario);
+    }
+
+    // DELETE: api/Usuario/Eliminar/yeymi
+    [HttpDelete("Eliminar/{user}")]
+    public async Task<IActionResult> Eliminar(string user)
+    {
+        var usuario = await (
+            from u in _context.Usuarios
+            where u.User.ToLower() == user.ToLower()
+            select u
+        ).FirstOrDefaultAsync();
+
+        if (usuario == null)
+            return NotFound("Usuario no encontrado.");
+
+        usuario.Estado = "Inactivo";
+
+        await _context.SaveChangesAsync();
+
+        return Ok("La cuenta ha sido desactivada correctamente.");
     }
 }

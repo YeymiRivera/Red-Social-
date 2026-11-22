@@ -29,6 +29,10 @@ namespace Tarea4.Migrations
                     b.Property<int>("UsuarioBloqueadoId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("UsuarioBloqueadorId", "UsuarioBloqueadoId");
 
                     b.HasIndex("UsuarioBloqueadoId");
@@ -72,6 +76,10 @@ namespace Tarea4.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Proveedor")
                         .IsRequired()
@@ -176,6 +184,10 @@ namespace Tarea4.Migrations
 
                     b.Property<int>("UsuarioSeguidoId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("UsuarioSeguidorId", "UsuarioSeguidoId");
 

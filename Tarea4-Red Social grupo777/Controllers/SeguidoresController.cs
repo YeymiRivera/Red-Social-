@@ -18,6 +18,7 @@ public class SeguidoresController : ControllerBase
     {
         var seguidores = await (
             from s in _context.Seguidores
+            where s.Estado == "Activo"
             select s
         ).ToListAsync();
 
@@ -78,4 +79,22 @@ public class SeguidoresController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(seguidor);
     }
+    [HttpDelete("Eliminar/{user}")]
+    public async Task<IActionResult> Eliminar(int UsuarioSeguidorId, int UsuarioSeguidoId)
+    {
+        var seguidor = await (
+            from s in _context.Seguidores
+            where s.UsuarioSeguidoId == UsuarioSeguidoId && s.UsuarioSeguidorId == UsuarioSeguidorId
+            select s
+        ).FirstOrDefaultAsync();
+
+        if (seguidor == null)
+            return NotFound("no se encontró el seguidor con los IDs proporcionados.");
+
+        seguidor.Estado = "Inactivo";
+        await _context.SaveChangesAsync();
+
+        return Ok("El seguidor ha sido eliminado correctamente.");
+    }
+   
 }

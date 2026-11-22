@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 namespace UsuarioApi.Controller;
+
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
@@ -18,6 +19,7 @@ public class BloqueadosController : ControllerBase
     {
         var bloqueados = await (
             from b in _context.Bloqueados
+            where b.Estado == "Activo"
             select b
         ).ToListAsync();
 
@@ -73,9 +75,26 @@ public class BloqueadosController : ControllerBase
 
         if (bloqueado == null)
             return NotFound("El bloqueado no existe.");
-        
+
         bloqueado.UsuarioBloqueadorId = nvuB;
         await _context.SaveChangesAsync();
         return Ok(bloqueado);
+    }
+    [HttpDelete("Eliminar")]
+    public async Task<IActionResult> Eliminar(int UsuarioBloqueadoId, int UsuarioBloqueadorId)
+    {
+        var bloqueado = await (
+            from b in _context.Bloqueados
+            where b.UsuarioBloqueadoId == UsuarioBloqueadoId && b.UsuarioBloqueadorId == UsuarioBloqueadorId
+            select b
+        ).FirstOrDefaultAsync();
+
+        if (bloqueado == null)
+            return NotFound("no se encontró el bloqueado con los IDs proporcionados.");
+
+        bloqueado.Estado = "Inactivo";
+        await _context.SaveChangesAsync();
+
+        return Ok("El bloqueado ha sido eliminado correctamente.");
     }
 }

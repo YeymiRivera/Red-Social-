@@ -6,6 +6,7 @@ public class CuentaExterna
     public int Id { get; set; }
 
     public int UsuarioId { get; set; }
+    public string Estado { get; set; } = "Activo";
 
     public string ProveedorId { get; set; }
 
