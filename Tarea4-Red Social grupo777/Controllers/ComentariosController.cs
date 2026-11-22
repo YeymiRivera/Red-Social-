@@ -9,47 +9,35 @@ using Microsoft.EntityFrameworkCore;
 public class ComentariosController : ControllerBase
 {
     private readonly Context _context;
-
-    public ComentariosController(Context context)
-    {
-        _context = context;
-    }
+    public ComentariosController(Context context) => _context = context;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? mensajeId)
     {
         var query = _context.Comentarios.Where(c => c.Activo);
-        if (mensajeId.HasValue)
-            query = query.Where(c => c.MensajeId == mensajeId.Value);
-
-        var lista = await query.OrderByDescending(c => c.FechaComentario).ToListAsync();
-        return Ok(lista);
+        if (mensajeId.HasValue) query = query.Where(c => c.MensajeId == mensajeId.Value);
+        return Ok(await query.OrderByDescending(c => c.FechaComentario).ToListAsync());
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var comentario = await _context.Comentarios.FirstOrDefaultAsync(c => c.Id == id && c.Activo);
-        if (comentario == null) return NotFound(new { mensaje = "Comentario no encontrado." });
-        return Ok(comentario);
+        var item = await _context.Comentarios.FirstOrDefaultAsync(c => c.Id == id && c.Activo);
+        return item == null ? NotFound(new { mensaje = "Comentario no encontrado o inactivo." }) : Ok(item);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Comentario nuevo)
     {
         if (string.IsNullOrWhiteSpace(nuevo.Texto))
-            return BadRequest(new { mensaje = "El texto del comentario es obligatorio." });
-
-        var mensajeExiste = await _context.Mensajes.AnyAsync(m => m.Id == nuevo.MensajeId && m.Activo);
-        if (!mensajeExiste)
-            return BadRequest(new { mensaje = $"El MensajeId {nuevo.MensajeId} no existe o está inactivo." });
+            return BadRequest(new { mensaje = "El texto es obligatorio." });
+        var existeMensaje = await _context.Mensajes.AnyAsync(m => m.Id == nuevo.MensajeId && m.Activo);
+        if (!existeMensaje) return BadRequest(new { mensaje = "El MensajeId no existe o está inactivo." });
 
         nuevo.Id = 0;
         nuevo.FechaComentario = DateTime.UtcNow;
         nuevo.Activo = true;
-        if (nuevo.UsuarioId <= 0)
-            nuevo.UsuarioId = await ObtenerORegistrarUsuarioActualAsync();
-
+        if (nuevo.UsuarioId <= 0) nuevo.UsuarioId = await ObtenerORegistrarUsuarioActualAsync();
         _context.Comentarios.Add(nuevo);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = nuevo.Id }, nuevo);
@@ -58,34 +46,33 @@ public class ComentariosController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] Comentario editado)
     {
-        var comentario = await _context.Comentarios.FindAsync(id);
-        if (comentario == null || !comentario.Activo)
-            return NotFound(new { mensaje = "Comentario no encontrado." });
+        var item = await _context.Comentarios.FindAsync(id);
+        if (item == null) return NotFound(new { mensaje = "Comentario no encontrado." });
+        if (!item.Activo) return BadRequest(new { mensaje = "No se puede actualizar un comentario inactivo." });
+        if (string.IsNullOrWhiteSpace(editado.Texto))
+            return BadRequest(new { mensaje = "El texto es obligatorio." });
 
-        if (!string.IsNullOrWhiteSpace(editado.Texto))
-            comentario.Texto = editado.Texto;
-
+        item.Texto = editado.Texto.Trim();
         await _context.SaveChangesAsync();
-        return Ok(comentario);
+        return Ok(item);
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var comentario = await _context.Comentarios.FindAsync(id);
-        if (comentario == null || !comentario.Activo)
-            return NotFound(new { mensaje = "Comentario no encontrado." });
+        var item = await _context.Comentarios.FindAsync(id);
+        if (item == null) return NotFound(new { mensaje = "Comentario no encontrado." });
+        if (!item.Activo) return BadRequest(new { mensaje = "El comentario ya está inactivo." });
 
-        comentario.Activo = false;
+        item.Activo = false;
         await _context.SaveChangesAsync();
-        return Ok(new { mensaje = "Comentario eliminado correctamente.", id });
+        return Ok(new { mensaje = "Comentario marcado como inactivo (soft delete).", id = item.Id, activo = item.Activo });
     }
 
     private async Task<int> ObtenerORegistrarUsuarioActualAsync()
     {
         var email = User.FindFirst(ClaimTypes.Email)?.Value ?? "oauth@redsocial.local";
         var nombre = User.Identity?.Name ?? "UsuarioOAuth";
-
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.email == email);
         if (usuario == null)
         {

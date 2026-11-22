@@ -9,42 +9,28 @@ using Microsoft.EntityFrameworkCore;
 public class MensajesController : ControllerBase
 {
     private readonly Context _context;
-
-    public MensajesController(Context context)
-    {
-        _context = context;
-    }
+    public MensajesController(Context context) => _context = context;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var lista = await _context.Mensajes
-            .Where(m => m.Activo)
-            .OrderByDescending(m => m.FechaCreacion)
-            .ToListAsync();
-        return Ok(lista);
-    }
+    public async Task<IActionResult> GetAll() =>
+        Ok(await _context.Mensajes.Where(m => m.Activo).OrderByDescending(m => m.FechaCreacion).ToListAsync());
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var mensaje = await _context.Mensajes.FirstOrDefaultAsync(m => m.Id == id && m.Activo);
-        if (mensaje == null) return NotFound(new { mensaje = "Mensaje no encontrado." });
-        return Ok(mensaje);
+        var item = await _context.Mensajes.FirstOrDefaultAsync(m => m.Id == id && m.Activo);
+        return item == null ? NotFound(new { mensaje = "Mensaje no encontrado o inactivo." }) : Ok(item);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Mensaje nuevo)
     {
         if (string.IsNullOrWhiteSpace(nuevo.Contenido))
-            return BadRequest(new { mensaje = "El contenido del mensaje es obligatorio." });
-
+            return BadRequest(new { mensaje = "El contenido es obligatorio." });
         nuevo.Id = 0;
         nuevo.FechaCreacion = DateTime.UtcNow;
         nuevo.Activo = true;
-        if (nuevo.UsuarioId <= 0)
-            nuevo.UsuarioId = await ObtenerORegistrarUsuarioActualAsync();
-
+        if (nuevo.UsuarioId <= 0) nuevo.UsuarioId = await ObtenerORegistrarUsuarioActualAsync();
         _context.Mensajes.Add(nuevo);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = nuevo.Id }, nuevo);
@@ -53,34 +39,33 @@ public class MensajesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] Mensaje editado)
     {
-        var mensaje = await _context.Mensajes.FindAsync(id);
-        if (mensaje == null || !mensaje.Activo)
-            return NotFound(new { mensaje = "Mensaje no encontrado." });
+        var item = await _context.Mensajes.FindAsync(id);
+        if (item == null) return NotFound(new { mensaje = "Mensaje no encontrado." });
+        if (!item.Activo) return BadRequest(new { mensaje = "No se puede actualizar un mensaje eliminado (inactivo)." });
+        if (string.IsNullOrWhiteSpace(editado.Contenido))
+            return BadRequest(new { mensaje = "El contenido es obligatorio." });
 
-        if (!string.IsNullOrWhiteSpace(editado.Contenido))
-            mensaje.Contenido = editado.Contenido;
-
+        item.Contenido = editado.Contenido.Trim();
         await _context.SaveChangesAsync();
-        return Ok(mensaje);
+        return Ok(item);
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var mensaje = await _context.Mensajes.FindAsync(id);
-        if (mensaje == null || !mensaje.Activo)
-            return NotFound(new { mensaje = "Mensaje no encontrado." });
+        var item = await _context.Mensajes.FindAsync(id);
+        if (item == null) return NotFound(new { mensaje = "Mensaje no encontrado." });
+        if (!item.Activo) return BadRequest(new { mensaje = "El mensaje ya está inactivo." });
 
-        mensaje.Activo = false;
+        item.Activo = false;
         await _context.SaveChangesAsync();
-        return Ok(new { mensaje = "Mensaje eliminado correctamente.", id });
+        return Ok(new { mensaje = "Mensaje marcado como inactivo (soft delete).", id = item.Id, activo = item.Activo });
     }
 
     private async Task<int> ObtenerORegistrarUsuarioActualAsync()
     {
         var email = User.FindFirst(ClaimTypes.Email)?.Value ?? "oauth@redsocial.local";
         var nombre = User.Identity?.Name ?? "UsuarioOAuth";
-
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.email == email);
         if (usuario == null)
         {
