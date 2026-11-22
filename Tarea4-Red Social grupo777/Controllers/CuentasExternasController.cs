@@ -18,6 +18,7 @@ public class CuentasExternasController : ControllerBase
     {
         var cuentasExternas = await (
             from c in _context.CuentasExternas
+            where c.Estado == "Activo"
             select c
         ).ToListAsync();
 
@@ -62,5 +63,39 @@ public class CuentasExternasController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(cuentaExterna);
+    }
+    
+    [HttpPut("Actualizar")]
+    public async Task<IActionResult> Actualizar(int id, string proveedor, string proveedorId)
+    {
+        var cuentaExterna = await (
+            from c in _context.CuentasExternas
+            where c.UsuarioId == id
+            select c
+        ).FirstOrDefaultAsync();
+
+        if (cuentaExterna == null)
+            return NotFound("La cuenta externa no existe.");
+        cuentaExterna.Proveedor = proveedor;
+        cuentaExterna.ProveedorId = proveedorId;
+        await _context.SaveChangesAsync();
+        return Ok(cuentaExterna);
+    }
+     [HttpDelete("Eliminar/Sesion/{id}")]
+    public async Task<IActionResult> Eliminar(int id)
+    {
+        var cuentaExterna = await (
+            from c in _context.CuentasExternas
+            where c.UsuarioId == id
+            select c
+        ).FirstOrDefaultAsync();
+
+        if (cuentaExterna == null)
+            return NotFound("no se encontró la cuenta externa con los IDs proporcionados.");
+
+        cuentaExterna.Estado = "Inactivo";
+        await _context.SaveChangesAsync();
+
+        return Ok("La cuenta externa ha sido eliminada correctamente.");
     }
 }
