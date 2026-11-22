@@ -1,9 +1,8 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace UsuarioApi.Controller;
-[Authorize]
+
 [ApiController]
 [Route("api/[controller]")]
 public class UsuarioController : ControllerBase
@@ -63,6 +62,35 @@ public class UsuarioController : ControllerBase
         usuario.Fecha=DateOnly.FromDateTime(DateTime.Now).ToString();
         usuario.Estado="Activo";
         _context.Usuarios.Add(usuario);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(usuario);
+    }
+
+    // PUT: api/Usuario/Actualizar
+    [HttpPut("Actualizar")]
+    public async Task<IActionResult> Actualizar(CambiarUsuario datos)
+    {
+        var usuario = await (
+            from u in _context.Usuarios
+            where u.User.ToLower() == datos.UserAntiguo.ToLower()
+            select u
+        ).FirstOrDefaultAsync();
+
+        if (usuario == null)
+            return NotFound("El usuario antiguo no existe.");
+
+        bool existe = await (
+            from u in _context.Usuarios
+            where u.User.ToLower() == datos.UserNuevo.ToLower()
+            select u
+        ).AnyAsync();
+
+        if (existe)
+            return Conflict("El nuevo nombre de usuario ya está ocupado.");
+
+        usuario.User = datos.UserNuevo;
 
         await _context.SaveChangesAsync();
 

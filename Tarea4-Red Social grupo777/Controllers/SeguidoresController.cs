@@ -62,4 +62,20 @@ public class SeguidoresController : ControllerBase
 
         return Ok(seguidor);
     }
+    // PUT: api/Usuario/Actualizar
+    [HttpPut("Actualizar")]
+    public async Task<IActionResult> Actualizar(int nvuSID, int UsuarioSeguidoId, int UsuarioSeguidorId)
+    {
+        var seguidor = await (
+            from s in _context.Seguidores
+            where s.UsuarioSeguidoId == UsuarioSeguidoId && s.UsuarioSeguidorId == UsuarioSeguidorId
+            select s
+        ).FirstOrDefaultAsync();
+
+        if (seguidor == null)
+            return NotFound("El seguidor no existe.");
+        seguidor.UsuarioSeguidorId = nvuSID;
+        await _context.SaveChangesAsync();
+        return Ok(seguidor);
+    }
 }

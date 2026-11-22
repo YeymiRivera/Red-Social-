@@ -63,4 +63,21 @@ public class CuentasExternasController : ControllerBase
 
         return Ok(cuentaExterna);
     }
+    
+    [HttpPut("Actualizar")]
+    public async Task<IActionResult> Actualizar(int id, string proveedor, string proveedorId)
+    {
+        var cuentaExterna = await (
+            from c in _context.CuentasExternas
+            where c.UsuarioId == id
+            select c
+        ).FirstOrDefaultAsync();
+
+        if (cuentaExterna == null)
+            return NotFound("La cuenta externa no existe.");
+        cuentaExterna.Proveedor = proveedor;
+        cuentaExterna.ProveedorId = proveedorId;
+        await _context.SaveChangesAsync();
+        return Ok(cuentaExterna);
+    }
 }

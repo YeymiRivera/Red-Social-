@@ -62,4 +62,20 @@ public class BloqueadosController : ControllerBase
 
         return Ok(bloqueado);
     }
+    [HttpPut("Actualizar")]
+    public async Task<IActionResult> Actualizar(int nvuB, int UsuarioBloqueadoId, int UsuarioBloqueadorId)
+    {
+        var bloqueado = await (
+            from b in _context.Bloqueados
+            where b.UsuarioBloqueadoId == UsuarioBloqueadoId && b.UsuarioBloqueadorId == UsuarioBloqueadorId
+            select b
+        ).FirstOrDefaultAsync();
+
+        if (bloqueado == null)
+            return NotFound("El bloqueado no existe.");
+        
+        bloqueado.UsuarioBloqueadorId = nvuB;
+        await _context.SaveChangesAsync();
+        return Ok(bloqueado);
+    }
 }
