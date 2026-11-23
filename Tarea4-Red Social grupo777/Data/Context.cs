@@ -13,6 +13,10 @@ public class Context : DbContext
     public DbSet<Comentario> Comentarios { get; set; }
     public DbSet<Reaccion> Reacciones { get; set; }
     public DbSet<Hashtag> Hashtags { get; set; }
+    public DbSet<Publicacion> Publicaciones { get; set; }
+    public DbSet<ImagenPublicacion> ImagenesPublicacion { get; set; }
+    public DbSet<CategoriaPublicacion> CategoriasPublicacion { get; set; }
+    public DbSet<EtiquetaPublicacion> EtiquetasPublicacion { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -53,5 +57,32 @@ public class Context : DbContext
             .WithMany()
             .HasForeignKey(b => b.UsuarioBloqueadoId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Publicacion>()
+        .HasOne<CategoriaPublicacion>()
+        .WithMany()
+        .HasForeignKey(p => p.CategoriaPublicacionId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Publicacion>()
+        .HasOne<Usuario>()
+        .WithMany()
+        .HasForeignKey(p => p.UsuarioId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ImagenPublicacion>()
+        .HasOne<Publicacion>()
+        .WithMany()
+        .HasForeignKey(i => i.PublicacionId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<EtiquetaPublicacion>()
+        .HasOne<Publicacion>()
+        .WithMany()
+        .HasForeignKey(e => e.PublicacionId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+
+        
     }
 }
