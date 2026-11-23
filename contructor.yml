@@ -2,33 +2,65 @@ services:
 
   backend:
     image: redsocial
-    container_name: usuario-api
     build:
       context: ./Tarea4-Red Social grupo777
       dockerfile: Dockerfile
-    ports:
-      - "${BACKEND_PORT}:5290"
+    expose:
+      - "5290"
     environment:
       ASPNETCORE_HTTP_PORTS: 5290
       ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+
+      GitHub__ClientId: ${GITHUB_CLIENT_ID}
+      GitHub__ClientSecret: ${GITHUB_CLIENT_SECRET}
+
+      Google__ClientId: ${GOOGLE_CLIENT_ID}
+      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
+
+      Dropbox__ClientId: ${DROPBOX_CLIENT_ID}
+      Dropbox__ClientSecret: ${DROPBOX_CLIENT_SECRET}
+      Dropbox__RedirectUri: ${DROPBOX_REDIRECT_URI}
+
+      Figma__ClientId: ${FIGMA_CLIENT_ID}
+      Figma__ClientSecret: ${FIGMA_CLIENT_SECRET}
+      Figma__RedirectUri: ${FIGMA_REDIRECT_URI}
+
+      FrontendUrl: http://localhost:5500
+
+    volumes:
+      - claves-dataprotection:/root/.aspnet/DataProtection-Keys
+
     depends_on:
       postgres:
         condition: service_healthy
+
     networks:
       - red-social
+
+  balanceador:
+    image: nginx:alpine
+    ports:
+      - "${BACKEND_PORT}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - red-social
+
   frontend:
-   image: redsocial-frontend
-   container_name: usuario-frontend
-   build:
-     context: ./Tarea4-Red Social grupo777/Frontend
-     dockerfile: Dockerfile
-   ports:
-     - "${FRONTEND_PORT}:80"
-   networks:
-     - red-social
+    image: redsocial-frontend
+    build:
+      context: ./Tarea4-Red Social grupo777/Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT}:80"
+    networks:
+      - red-social
+
   postgres:
-    container_name: usuario-db
     image: postgres:17
+    container_name: usuario-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -45,6 +77,10 @@ services:
 
 volumes:
   datos-postgres:
+    name: redsocial-datos-postgres
+
+  claves-dataprotection:
+    name: redsocial-claves-dataprotection
 
 networks:
   red-social:
