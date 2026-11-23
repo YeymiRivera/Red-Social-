@@ -36,6 +36,30 @@ namespace Tarea4.Migrations
                     b.ToTable("Bloqueados");
                 });
 
+            modelBuilder.Entity("CategoriaPublicacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CategoriasPublicacion");
+                });
+
             modelBuilder.Entity("Comentario", b =>
                 {
                     b.Property<int>("Id")
@@ -91,6 +115,34 @@ namespace Tarea4.Migrations
                     b.ToTable("CuentasExternas");
                 });
 
+            modelBuilder.Entity("EtiquetaPublicacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.ToTable("EtiquetasPublicacion");
+                });
+
             modelBuilder.Entity("Hashtag", b =>
                 {
                     b.Property<int>("Id")
@@ -112,6 +164,34 @@ namespace Tarea4.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Hashtags");
+                });
+
+            modelBuilder.Entity("ImagenPublicacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UrlImagen")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicacionId");
+
+                    b.ToTable("ImagenesPublicacion");
                 });
 
             modelBuilder.Entity("Mensaje", b =>
@@ -138,6 +218,39 @@ namespace Tarea4.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Mensajes");
+                });
+
+            modelBuilder.Entity("Publicacion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CategoriaPublicacionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Contenido")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaPublicacionId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("Publicaciones");
                 });
 
             modelBuilder.Entity("Reaccion", b =>
@@ -245,6 +358,39 @@ namespace Tarea4.Migrations
                         .IsRequired();
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("EtiquetaPublicacion", b =>
+                {
+                    b.HasOne("Publicacion", null)
+                        .WithMany()
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ImagenPublicacion", b =>
+                {
+                    b.HasOne("Publicacion", null)
+                        .WithMany()
+                        .HasForeignKey("PublicacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Publicacion", b =>
+                {
+                    b.HasOne("CategoriaPublicacion", null)
+                        .WithMany()
+                        .HasForeignKey("CategoriaPublicacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Seguidores", b =>
