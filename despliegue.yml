@@ -5,16 +5,23 @@ services:
     pull_policy: never 
     container_name: usuario-api
     ports:
-      - "${BACKEND_PORT}:8080"
+      - "${BACKEND_PORT}:5290"
     environment:
-      ASPNETCORE_HTTP_PORTS: 8080
+      ASPNETCORE_HTTP_PORTS: 5290
       ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - red-social
-
+  frontend:
+   image: redsocial-frontend
+   pull_policy: never
+   container_name: usuario-frontend
+   ports:
+     - "${FRONTEND_PORT}:80"
+   networks:
+     - red-social
   postgres:
     container_name: usuario-db
     image: postgres:17
