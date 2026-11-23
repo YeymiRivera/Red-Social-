@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace UsuarioApi.Controller;
-
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class UsuarioController : ControllerBase

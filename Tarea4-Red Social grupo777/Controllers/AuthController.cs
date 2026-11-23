@@ -16,7 +16,7 @@ public class AuthController : ControllerBase
     private readonly Context _context;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
-
+    
     public AuthController(Context context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
         _context = context;
@@ -144,7 +144,8 @@ public class AuthController : ControllerBase
         Console.WriteLine("Usuario autenticado: " + User.Identity?.IsAuthenticated);
         // Cerrar la cookie temporal
         await HttpContext.SignOutAsync("External");
-        return Redirect("http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html");
+        var frontendUrl = _configuration["FrontendUrl"];
+        return Redirect($"{frontendUrl}/Bienvenida/bienvenida.html");
     }
 
     [HttpGet("GithubLogin")]
@@ -308,10 +309,8 @@ public class AuthController : ControllerBase
             CookieAuthenticationDefaults.AuthenticationScheme,
             principal
         );
-        Console.WriteLine("Usuario autenticado: " + User.Identity?.IsAuthenticated);
-        return Redirect(
-            "http://localhost:5500/Tarea4-Red%20Social%20grupo777/Frontend/Bienvenida/bienvenida.html"
-        );
+        var frontendUrl = _configuration["FrontendUrl"];
+        return Redirect($"{frontendUrl}/Bienvenida/bienvenida.html");
     }
      [HttpGet("dropbox/login")]
     public IActionResult DropboxLogin()

@@ -16,7 +16,7 @@ WORKDIR /app
 # Copiar archivos compilados
 COPY --from=build /app/build .
 # Puerto de escucha
-ENV ASPNETCORE_HTTP_PORTS=8080
-EXPOSE 8080
+ENV ASPNETCORE_HTTP_PORTS=5290
+EXPOSE 5290
 # Iniciar la API
 ENTRYPOINT ["dotnet", "Tarea4.dll"]
