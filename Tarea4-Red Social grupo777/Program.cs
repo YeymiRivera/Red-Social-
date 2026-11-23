@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.DataProtection;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -14,6 +15,11 @@ builder.Services.AddDbContext<Context>(options => options.UseNpgsql(
 builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+builder.Services.AddDataProtection()
+    .SetApplicationName("RedSocial777")
+    .PersistKeysToFileSystem(
+        new DirectoryInfo("/root/.aspnet/DataProtection-Keys")
+    );
 builder.Services.AddAuthentication(
     CookieAuthenticationDefaults.AuthenticationScheme
 )

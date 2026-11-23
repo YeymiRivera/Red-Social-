@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Text;
+using Microsoft.AspNetCore.DataProtection;
 
 [ApiController]
 [Route("api/[controller]")]
