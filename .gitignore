@@ -275,4 +275,4 @@ __pycache__/
 # Variables de entorno y credenciales
 
 # Configuraciones locales con credenciales
-appsettings.Development.json
+appsettings.json

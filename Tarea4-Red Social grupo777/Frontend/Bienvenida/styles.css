@@ -1,0 +1,173 @@
+
+/* BARRA DE NAVEGACION */
+
+.navbar {
+    width: 100%;
+    height: 65px;
+    background: #ffffff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 8%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.navbar h2 {
+    color: #222;
+}
+
+.btn-salir {
+    padding: 9px 18px;
+    border: none;
+    border-radius: 6px;
+    background: #eeeeee;
+    cursor: pointer;
+}
+
+/* PERFIL */
+
+.perfil-container {
+    max-width: 850px;
+    margin: 45px auto;
+    padding: 20px;
+}
+
+.perfil-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.perfil-header h1 {
+    color: #222;
+    margin-bottom: 5px;
+}
+
+.perfil-header p {
+    color: #777;
+}
+
+.avatar {
+    width: 75px;
+    height: 75px;
+    border-radius: 50%;
+    background: #344cdb;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 30px;
+    font-weight: bold;
+}
+
+.estado {
+    margin-left: auto;
+    padding: 7px 15px;
+    border-radius: 20px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 13px;
+}
+
+/* TARJETA */
+
+.perfil-card {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+}
+
+.card-title {
+    margin-bottom: 25px;
+}
+
+.card-title h2 {
+    margin-bottom: 7px;
+    color: #222;
+}
+
+.card-title p {
+    color: #777;
+    font-size: 14px;
+}
+
+/* FORMULARIO */
+
+.campo {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+}
+
+.campo label {
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #444;
+    font-size: 14px;
+}
+
+.campo input,
+.campo textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    outline: none;
+}
+
+.campo input:focus,
+.campo textarea:focus {
+    border-color: #344cdb;
+}
+
+.campo input:disabled {
+    background: #f3f4f6;
+    color: #777;
+}
+
+.campo textarea {
+    resize: vertical;
+}
+
+/* BOTONES */
+
+.acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-secundario,
+.btn-guardar {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-secundario {
+    background: #eeeeee;
+    color: #333;
+}
+
+.btn-guardar {
+    background: #344cdb;
+    color: white;
+}
+
+.btn-guardar:hover {
+    background: #263bb5;
+}
+
+.mensaje {
+    margin-top: 20px;
+    text-align: right;
+    color: #344cdb;
+    font-size: 14px;
+}

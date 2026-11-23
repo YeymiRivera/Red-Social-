@@ -20,6 +20,7 @@ public class UsuarioController : ControllerBase
     {
         var usuarios = await (
             from u in _context.Usuarios
+            where u.Estado == "Activo"
             select u
         ).ToListAsync();
 

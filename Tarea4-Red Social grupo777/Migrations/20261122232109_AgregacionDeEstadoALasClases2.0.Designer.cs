@@ -11,8 +11,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Tarea4.Migrations
 {
     [DbContext(typeof(Context))]
-    [Migration("20261122183333_AgregarTablasGerson")]
-    partial class AgregarTablasGerson
+    [Migration("20261122232109_AgregacionDeEstadoALasClases2.0")]
+    partial class AgregacionDeEstadoALasClases20
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -23,6 +23,25 @@ namespace Tarea4.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Bloqueados", b =>
+                {
+                    b.Property<int>("UsuarioBloqueadorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioBloqueadoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("UsuarioBloqueadorId", "UsuarioBloqueadoId");
+
+                    b.HasIndex("UsuarioBloqueadoId");
+
+                    b.ToTable("Bloqueados");
+                });
 
             modelBuilder.Entity("Comentario", b =>
                 {
@@ -51,6 +70,36 @@ namespace Tarea4.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Comentarios");
+                });
+
+            modelBuilder.Entity("CuentaExterna", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProveedorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("CuentasExternas");
                 });
 
             modelBuilder.Entity("Hashtag", b =>
@@ -131,6 +180,25 @@ namespace Tarea4.Migrations
                     b.ToTable("Reacciones");
                 });
 
+            modelBuilder.Entity("Seguidores", b =>
+                {
+                    b.Property<int>("UsuarioSeguidorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioSeguidoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("UsuarioSeguidorId", "UsuarioSeguidoId");
+
+                    b.HasIndex("UsuarioSeguidoId");
+
+                    b.ToTable("Seguidores");
+                });
+
             modelBuilder.Entity("Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -162,6 +230,55 @@ namespace Tarea4.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("Bloqueados", b =>
+                {
+                    b.HasOne("Usuario", "UsuarioBloqueado")
+                        .WithMany()
+                        .HasForeignKey("UsuarioBloqueadoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Usuario", "UsuarioBloqueador")
+                        .WithMany()
+                        .HasForeignKey("UsuarioBloqueadorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UsuarioBloqueado");
+
+                    b.Navigation("UsuarioBloqueador");
+                });
+
+            modelBuilder.Entity("CuentaExterna", b =>
+                {
+                    b.HasOne("Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("Seguidores", b =>
+                {
+                    b.HasOne("Usuario", "UsuarioSeguido")
+                        .WithMany()
+                        .HasForeignKey("UsuarioSeguidoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Usuario", "UsuarioSeguidor")
+                        .WithMany()
+                        .HasForeignKey("UsuarioSeguidorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UsuarioSeguido");
+
+                    b.Navigation("UsuarioSeguidor");
                 });
 #pragma warning restore 612, 618
         }
