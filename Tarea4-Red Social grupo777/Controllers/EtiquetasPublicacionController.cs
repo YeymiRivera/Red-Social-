@@ -57,6 +57,9 @@ public class EtiquetasPublicacionController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] EtiquetaPublicacion editada)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var etiqueta = await _context.EtiquetasPublicacion.FindAsync(id);
         if (etiqueta == null)
             return NotFound(new { mensaje = "Etiqueta no encontrada." });
@@ -74,6 +77,9 @@ public class EtiquetasPublicacionController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var etiqueta = await _context.EtiquetasPublicacion.FindAsync(id);
         if (etiqueta == null)
             return NotFound(new { mensaje = "Etiqueta no encontrada." });

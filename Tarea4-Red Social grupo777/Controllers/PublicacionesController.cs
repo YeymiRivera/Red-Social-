@@ -61,6 +61,9 @@ public class PublicacionesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] Publicacion editada)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var publicacion = await _context.Publicaciones.FindAsync(id);
         if (publicacion == null)
             return NotFound(new { mensaje = "Publicación no encontrada." });
@@ -84,6 +87,9 @@ public class PublicacionesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var publicacion = await _context.Publicaciones.FindAsync(id);
         if (publicacion == null)
             return NotFound(new { mensaje = "Publicación no encontrada." });

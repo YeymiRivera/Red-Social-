@@ -51,6 +51,9 @@ public class CategoriasPublicacionController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] CategoriaPublicacion editada)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var categoria = await _context.CategoriasPublicacion.FindAsync(id);
         if (categoria == null)
             return NotFound(new { mensaje = "Categoría no encontrada." });
@@ -69,6 +72,9 @@ public class CategoriasPublicacionController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var categoria = await _context.CategoriasPublicacion.FindAsync(id);
         if (categoria == null)
             return NotFound(new { mensaje = "Categoría no encontrada." });
