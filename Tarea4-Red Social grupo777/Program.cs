@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Scalar.AspNetCore;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,8 +104,43 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession();
+var redisConnection = builder.Configuration["REDIS_CONNECTION"];
+
+if (!string.IsNullOrWhiteSpace(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.InstanceName = "RedSocial:";
+    });
+}
+else
+{
+    // Para seguir trabajando localmente sin Redis.
+    builder.Services.AddDistributedMemoryCache();
+}
+
+builder.Services.AddSession(options =>
+{
+    options.Cookie.Name = "RedSocial.Session";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.IdleTimeout = TimeSpan.FromMinutes(15);
+});
+if (args.Contains("--migrar"))
+{
+    using var migrationApp = builder.Build();
+
+    using var scope = migrationApp.Services.CreateScope();
+
+    var db = scope.ServiceProvider.GetRequiredService<Context>();
+
+    db.Database.Migrate();
+
+    return;
+}
 builder.Services.AddOptions<ScalarOptions>().BindConfiguration("Scalar");
 
 var app = builder.Build();
@@ -117,11 +153,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     app.MapScalarApiReference();
 }
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<Context>();
-    db.Database.Migrate();
-}
+
 
 app.UseStaticFiles();
 

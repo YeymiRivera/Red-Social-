@@ -10,6 +10,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 5290
+      REDIS_CONNECTION: redis:6379
       ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-11ye}"
       FrontendUrl: "http://localhost:${FRONTEND_PORT:-5500}"
       Twitter__ClientId: "${TWITTER_CLIENT_ID:-RXdIX1BRb3lzSUpueXVza2FkQW06MTpjaQ}"
@@ -21,12 +22,38 @@ services:
       - claves-dataprotection:/root/.aspnet/DataProtection-Keys
 
     depends_on:
-      postgres:
-        condition: service_healthy
+     redis:
+       condition: service_healthy
+     migraciones:
+       condition: service_completed_successfully
 
     networks:
       - red-social
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - red-social
 
+  migraciones:
+    image: redsocial
+    build:
+      context: ./Tarea4-Red Social grupo777
+      dockerfile: Dockerfile
+    command: ["--migrar"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - red-social
   balanceador:
     image: nginx:alpine
     ports:
