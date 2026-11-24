@@ -1,65 +1,118 @@
+const API_URL = (() => {
+    if (window.API_URL) return window.API_URL;
 
-// Datos de ejemplo devueltos por tu API
-const usuario = {
-    id: 1,
-    user: "Yeymi miguel Rivera Castillo",
-    email: "yeymirivera13@gmail.com",
-    biografia: "",
-    fecha: "2026-11-19T02:35:50.5609355Z",
-    estado: "Activo"
-};
+    const { protocol, hostname, port } = window.location;
 
-// Guardamos una copia para poder restablecer los campos
-const usuarioOriginal = { ...usuario };
+    if (port === "5500") {
+        return `${protocol}//${hostname}:5290`;
+    }
 
-// Referencias a los elementos HTML
+    return window.location.origin;
+})();
+
 const nombre = document.getElementById("nombre");
 const email = document.getElementById("email");
 const biografia = document.getElementById("biografia");
-const idUsuario = document.getElementById("idUsuario");
 const fecha = document.getElementById("fecha");
-
 const mensaje = document.getElementById("mensaje");
 
-// Mostrar información
+let usuarioOriginal = {
+    user: "",
+    email: "",
+    biografia: "",
+    fecha: "",
+    estado: "Activo"
+};
+
 function mostrarUsuario(datos) {
-    nombre.value = datos.user;
-    email.value = datos.email;
-    biografia.value = datos.biografia;
+    nombre.value = datos.user || "";
+    email.value = datos.email || "";
+    biografia.value = datos.biografia || "";
 
-    fecha.value = new Date(datos.fecha).toLocaleString("es-BO");
+    fecha.value = datos.fecha
+        ? new Date(datos.fecha).toLocaleString("es-BO")
+        : "—";
 
-    document.getElementById("nombreTitulo").textContent = datos.user;
+    document.getElementById("nombreTitulo").textContent =
+        datos.user || "Mi perfil";
 
     document.getElementById("avatar").textContent =
-        datos.user.charAt(0).toUpperCase();
+        (datos.user || "U").charAt(0).toUpperCase();
 
-    document.getElementById("estado").textContent = datos.estado;
+    document.getElementById("estado").textContent =
+        datos.estado || "Activo";
 }
 
-// Cargar los datos al abrir la página
-mostrarUsuario(usuario);
+async function cargarPerfil() {
+    try {
+        const respuesta = await fetch(`${API_URL}/api/Auth/me`, {
+            credentials: "include"
+        });
 
-// Simular el guardado
-document.getElementById("formPerfil").addEventListener("submit", function(event) {
+        if (!respuesta.ok) {
+            window.location.href = `${API_URL}/login.html`;
+            return;
+        }
 
-    event.preventDefault();
+        const sesion = await respuesta.json();
 
-    mensaje.textContent =
-        "Vista previa: los cambios todavía no se guardaron en el servidor.";
+        let datos = {
+            user: sesion.nombre || "Usuario",
+            email: sesion.email || "",
+            biografia: "",
+            fecha: "",
+            estado: "Activo"
+        };
 
+        try {
+            const perfil = await fetch(
+                `${API_URL}/api/Usuario/Buscar/${encodeURIComponent(sesion.nombre)}`,
+                { credentials: "include" });
+
+            if (perfil.ok) {
+                const usuario = await perfil.json();
+
+                datos = {
+                    user: usuario.user ?? datos.user,
+                    email: usuario.email ?? datos.email,
+                    biografia: usuario.biografia ?? datos.biografia,
+                    fecha: usuario.fecha ?? datos.fecha,
+                    estado: usuario.estado ?? datos.estado
+                };
+            }
+        } catch {
+            // Si falla la consulta del perfil, se muestran los datos de la sesión.
+        }
+
+        usuarioOriginal = { ...datos };
+        mostrarUsuario(datos);
+    } catch {
+        window.location.href = `${API_URL}/login.html`;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    cargarPerfil();
+
+    document.getElementById("formPerfil")?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        mensaje.textContent =
+            "Vista previa: los cambios todavía no se guardaron en el servidor.";
+    });
+
+    document.getElementById("restablecer")?.addEventListener("click", () => {
+        mostrarUsuario(usuarioOriginal);
+        mensaje.textContent = "Se restauraron los datos originales.";
+    });
 });
 
-// Restablecer los campos
-document.getElementById("restablecer").addEventListener("click", function() {
-
-    mostrarUsuario(usuarioOriginal);
-
-    mensaje.textContent = "Se restauraron los datos originales.";
-
-});
-
-// Botón de salida (solo visual por ahora)
-function cerrarVista() {
-    alert("La función de cerrar sesión todavía no está implementada.");
+async function cerrarVista() {
+    try {
+        await fetch(`${API_URL}/api/Auth/logout`, {
+            method: "POST",
+            credentials: "include"
+        });
+    } finally {
+        window.location.href = `${API_URL}/login.html`;
+    }
 }

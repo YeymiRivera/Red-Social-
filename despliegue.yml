@@ -6,24 +6,12 @@ services:
     expose:
       - "5290"
     environment:
+      ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 5290
-      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-
-      GitHub__ClientId: ${GITHUB_CLIENT_ID}
-      GitHub__ClientSecret: ${GITHUB_CLIENT_SECRET}
-
-      Google__ClientId: ${GOOGLE_CLIENT_ID}
-      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
-
-      Dropbox__ClientId: ${DROPBOX_CLIENT_ID}
-      Dropbox__ClientSecret: ${DROPBOX_CLIENT_SECRET}
-      Dropbox__RedirectUri: ${DROPBOX_REDIRECT_URI}
-
-      Figma__ClientId: ${FIGMA_CLIENT_ID}
-      Figma__ClientSecret: ${FIGMA_CLIENT_SECRET}
-      Figma__RedirectUri: ${FIGMA_REDIRECT_URI}
-
-      FrontendUrl: http://localhost:5500
+      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-11ye}"
+      FrontendUrl: "http://localhost:${FRONTEND_PORT:-5500}"
+      Twitter__ClientId: "${TWITTER_CLIENT_ID:-RXdIX1BRb3lzSUpueXVza2FkQW06MTpjaQ}"
+      Twitter__ClientSecret: "${TWITTER_CLIENT_SECRET:-zX1noBHXcpTEeY2c8JzJqmHlpRFcI2uJfn1HAQwzT12JpS1Emk}"
 
     volumes:
       - claves-dataprotection:/root/.aspnet/DataProtection-Keys
@@ -38,7 +26,7 @@ services:
   balanceador:
     image: nginx:alpine
     ports:
-      - "${BACKEND_PORT}:80"
+      - "${BACKEND_PORT:-5290}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -50,7 +38,7 @@ services:
     image: redsocial-frontend
     pull_policy: never
     ports:
-      - "${FRONTEND_PORT}:80"
+      - "${FRONTEND_PORT:-5500}:80"
     networks:
       - red-social
 
@@ -58,13 +46,13 @@ services:
     image: postgres:17
     container_name: usuario-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-RedsocialDB}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-11ye}
     volumes:
       - datos-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-RedsocialDB}"]
       interval: 5s
       timeout: 5s
       retries: 5

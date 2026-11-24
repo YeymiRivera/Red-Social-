@@ -1,3 +1,14 @@
+:root {
+    --bg: #050914;
+    --bg-soft: #0a1122;
+    --card: rgba(13, 21, 39, 0.88);
+    --card-border: rgba(96, 165, 250, 0.18);
+    --text: #e8eefc;
+    --muted: #93a4c3;
+    --primary: #3b82f6;
+    --primary-2: #60a5fa;
+    --danger: #f87171;
+}
 
 * {
     margin: 0;
@@ -5,86 +16,372 @@
     box-sizing: border-box;
 }
 
+html,
 body {
-    font-family: Arial, sans-serif;
-    background: #f2f4f8;
+    min-height: 100%;
+}
+
+body {
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+        radial-gradient(ellipse at 18% 0%, rgba(37, 99, 235, 0.28), transparent 55%),
+        radial-gradient(ellipse at 88% 100%, rgba(124, 58, 237, 0.20), transparent 52%),
+        var(--bg);
+    color: var(--text);
     min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    overflow-x: hidden;
 }
 
-.contenedor {
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(96, 165, 250, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(96, 165, 250, 0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, black, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at center, black, transparent 75%);
+    pointer-events: none;
+}
+
+.bg-glow {
+    position: fixed;
+    width: 340px;
+    height: 340px;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.32;
+    pointer-events: none;
+}
+
+.bg-glow-1 {
+    top: -120px;
+    left: -100px;
+    background: #1d4ed8;
+}
+
+.bg-glow-2 {
+    right: -120px;
+    bottom: -140px;
+    background: #7c3aed;
+}
+
+.login-shell {
+    position: relative;
+    z-index: 1;
     width: 100%;
-    max-width: 420px;
-    padding: 20px;
+    max-width: 440px;
 }
 
-.login {
-    background: white;
-    padding: 40px 30px;
-    border-radius: 12px;
+.login-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 28px;
+    padding: 34px 30px 24px;
+    box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(18px);
+}
+
+.brand {
     text-align: center;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+    margin-bottom: 24px;
 }
 
-.login h1 {
-    margin-bottom: 15px;
-    color: #222;
+.brand-mark {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 14px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    box-shadow: 0 10px 30px rgba(37, 99, 235, 0.35);
 }
 
-.login p {
-    color: #666;
-    line-height: 1.5;
+.brand-mark svg {
+    width: 30px;
+    height: 30px;
 }
 
-#googleLogin {
+.brand h1 {
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #ffffff, #93c5fd);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.brand p {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.alerta {
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 12px;
+    background: rgba(248, 113, 113, 0.1);
+    color: #fecaca;
+    font-size: 13.5px;
+    line-height: 1.45;
+}
+
+.opciones {
+    display: grid;
+    gap: 10px;
+}
+
+.opciones-titulo {
+    margin: 0 0 2px 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.btn {
     width: 100%;
-    margin-top: 30px;
-    padding: 13px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: white;
-    cursor: pointer;
-    font-size: 15px;
+    min-height: 54px;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 12px;
-}
-
-#googleLogin:hover {
-    background: #f7f7f7;
-}
-
-#googleLogin img {
-    width: 20px;
-    height: 20px;
-}
-#githubLogin {
-    width: 100%;
-    margin-top: 30px;
-    padding: 13px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: white;
-    cursor: pointer;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    font: inherit;
     font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        border-color 0.18s ease,
+        background 0.18s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn:disabled,
+.btn.cargando {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+}
+
+.btn-icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    display: grid;
+    place-items: center;
+}
+
+.btn-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+.btn-text {
+    flex: 1;
+    text-align: left;
+}
+
+.btn-arrow {
+    opacity: 0.5;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.btn:hover .btn-arrow {
+    opacity: 1;
+    transform: translateX(3px);
+}
+
+.btn-google {
+    background: #101a2e;
+    border-color: #26344d;
+}
+
+.btn-google:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 10px 30px rgba(59, 130, 246, 0.18);
+}
+
+.btn-github {
+    background: #171c28;
+    border-color: #2b3446;
+}
+
+.btn-github:hover {
+    border-color: #64748b;
+    box-shadow: 0 10px 30px rgba(100, 116, 139, 0.18);
+}
+
+.btn-dropbox {
+    background: linear-gradient(135deg, #0061ff, #2f80ff);
+    box-shadow: 0 10px 30px rgba(0, 97, 255, 0.22);
+}
+
+.btn-dropbox:hover {
+    box-shadow: 0 14px 34px rgba(0, 97, 255, 0.35);
+}
+
+.btn-figma {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    box-shadow: 0 10px 30px rgba(124, 58, 237, 0.22);
+}
+
+.btn-figma:hover {
+    box-shadow: 0 14px 34px rgba(124, 58, 237, 0.35);
+}
+
+.btn-x {
+    background: #0b0b0d;
+    border-color: #2f3136;
+}
+
+.btn-x:hover {
+    border-color: #e8eefc;
+    box-shadow: 0 12px 32px rgba(232, 238, 252, 0.12);
+}
+
+.perfil {
+    text-align: center;
+}
+
+.perfil-card {
     display: flex;
     align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+    padding: 14px;
+    border: 1px solid #1e2d47;
+    border-radius: 16px;
+    background: #0d172a;
+    text-align: left;
+}
+
+.perfil-avatar {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.perfil-datos {
+    min-width: 0;
+}
+
+.perfil-datos h2 {
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.perfil-datos p {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.perfil-proveedor {
+    margin-left: auto;
+    padding: 4px 8px;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.12);
+    color: #93c5fd;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.btn-continuar {
     justify-content: center;
-    gap: 12px;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3);
 }
 
-#githubLogin:hover {
-    background: #f7f7f7;
+.btn-continuar .btn-text {
+    flex: 0 1 auto;
+    text-align: center;
 }
 
-#githubLogin img {
-    width: 20px;
-    height: 20px;
+.btn-logout {
+    justify-content: center;
+    margin-top: 10px;
+    border-color: #2b3446;
+    background: transparent;
+    color: var(--muted);
 }
-.informacion {
-    margin-top: 25px;
+
+.btn-logout:hover {
+    border-color: rgba(248, 113, 113, 0.4);
+    color: #fecaca;
+}
+
+.legal {
+    margin-top: 20px;
+    color: #64748b;
     font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 16px;
+    }
+
+    .login-card {
+        padding: 28px 20px 20px;
+        border-radius: 24px;
+    }
+
+    .brand h1 {
+        font-size: 25px;
+    }
 }
