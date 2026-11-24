@@ -869,7 +869,13 @@ public class AuthController : ControllerBase
         else
         {
             usuario.User = nombre;
-            usuario.email = email;
+
+            // X (Twitter) no entrega correo con el alcance users.read. No se debe
+            // borrar el correo que el usuario ya tenía guardado.
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                usuario.email = email;
+            }
 
             if (string.IsNullOrWhiteSpace(usuario.Biografia))
             {
