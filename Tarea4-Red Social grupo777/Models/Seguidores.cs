@@ -8,8 +8,8 @@ public class Seguidores
     public string Estado { get; set; } = "Activo";
 
     [ForeignKey("UsuarioSeguidorId")]
-    public Usuario UsuarioSeguidor { get; set; }
+    public Usuario UsuarioSeguidor { get; set; } = null!;
 
     [ForeignKey("UsuarioSeguidoId")]
-    public Usuario UsuarioSeguido { get; set; }
+    public Usuario UsuarioSeguido { get; set; } = null!;
 }

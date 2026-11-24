@@ -7,8 +7,8 @@ public class Bloqueados
     public string Estado { get; set; } = "Activo";
 
     [ForeignKey("UsuarioBloqueadorId")]
-    public Usuario UsuarioBloqueador { get; set; }
+    public Usuario UsuarioBloqueador { get; set; } = null!;
 
     [ForeignKey("UsuarioBloqueadoId")]
-    public Usuario UsuarioBloqueado { get; set; }
+    public Usuario UsuarioBloqueado { get; set; } = null!;
 }

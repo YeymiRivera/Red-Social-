@@ -1,14 +1,13 @@
-
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using System.Net.Http.Headers;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
-using Microsoft.AspNetCore.DataProtection;
+using System.Text.Json;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -17,33 +16,35 @@ public class AuthController : ControllerBase
     private readonly Context _context;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
-    
-    public AuthController(Context context, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+
+    public AuthController(
+        Context context,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
     }
 
-    // Iniciar sesión con Google
+    // ================= GOOGLE =================
     [HttpGet("GoogleLogin")]
     public IActionResult GoogleLogin()
     {
+        if (!GoogleConfigurado())
+        {
+            return VolverAlLogin(
+                "Google todavía no está configurado. Agrega Google:ClientId y Google:ClientSecret.");
+        }
+
         var propiedades = new AuthenticationProperties
         {
-            RedirectUri = Url.Action(
-                nameof(GoogleResponse),
-                "Auth"
-            )
+            RedirectUri = Url.Action(nameof(GoogleResponse), "Auth")
         };
 
-        return Challenge(
-            propiedades,
-            GoogleDefaults.AuthenticationScheme
-        );
+        return Challenge(propiedades, GoogleDefaults.AuthenticationScheme);
     }
 
-    // Recibir los datos de Google
     [HttpGet("GoogleResponse")]
     public async Task<IActionResult> GoogleResponse()
     {
@@ -51,335 +52,410 @@ public class AuthController : ControllerBase
 
         if (!resultado.Succeeded || resultado.Principal == null)
         {
-            return Unauthorized(new
-            {
-                mensaje = "No se pudo autenticar con Google."
-            });
+            return VolverAlLogin("No se pudo completar el inicio de sesión con Google.");
         }
-        ;
 
         var identidad = resultado.Principal;
+        var googleId = identidad.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var email = identidad.FindFirst(ClaimTypes.Email)?.Value;
+        var nombre = identidad.FindFirst(ClaimTypes.Name)?.Value;
 
-        var googleId = identidad.FindFirst(
-            ClaimTypes.NameIdentifier)?.Value;
-
-        var email = identidad.FindFirst(
-            ClaimTypes.Email)?.Value;
-
-        var nombre = identidad.FindFirst(
-            ClaimTypes.Name)?.Value;
-
-        if (string.IsNullOrEmpty(googleId) ||
-            string.IsNullOrEmpty(email))
+        if (string.IsNullOrWhiteSpace(googleId) || string.IsNullOrWhiteSpace(email))
         {
-            return Unauthorized(new
-            {
-                mensaje = "Google no proporcionó los datos necesarios."
-            });
-        }
-        ;
-
-        // Buscar usuario en PostgreSQL
-        var consulta = await (
-     from c in _context.CuentasExternas
-     where c.ProveedorId == googleId
-        && c.Proveedor == "Google"
-     select c
- ).FirstOrDefaultAsync();
-
-        Usuario usuario;
-
-        if (consulta == null)
-        {
-            usuario = new Usuario
-            {
-                User = nombre ?? email.Split('@')[0],
-                email = email,
-                Biografia = "",
-                Fecha = DateTime.UtcNow.ToString("O"),
-                Estado = "Activo"
-            };
-
-            _context.Usuarios.Add(usuario);
-            await _context.SaveChangesAsync();
-
-            var cuentaExterna = new CuentaExterna
-            {
-                ProveedorId = googleId,
-                Proveedor = "Google",
-                UsuarioId = usuario.Id
-            };
-
-            _context.CuentasExternas.Add(cuentaExterna);
-            await _context.SaveChangesAsync();
-        }
-        else
-        {
-            usuario = await _context.Usuarios.FindAsync(consulta.UsuarioId);
-
-            if (usuario == null)
-            {
-                return Unauthorized("No se encontró el usuario local.");
-            }
+            return VolverAlLogin("Google no proporcionó los datos necesarios.");
         }
 
-        // Generar la cookie de autenticación
-        var claims = new List<Claim>
-        {
-        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-        new Claim(ClaimTypes.Name, usuario.User),
-        new Claim(ClaimTypes.Email, usuario.email)
-        };
-
-        var identidadclaim = new ClaimsIdentity(
-            claims,
-            CookieAuthenticationDefaults.AuthenticationScheme
-        );
-
-        var principal = new ClaimsPrincipal(identidadclaim);
-
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            principal
-        );
-        Console.WriteLine("Usuario autenticado: " + User.Identity?.IsAuthenticated);
-        // Cerrar la cookie temporal
+        var usuario = await ObtenerOCrearUsuario("Google", googleId, nombre, email);
+        await IniciarSesionCookie(usuario, "Google");
         await HttpContext.SignOutAsync("External");
-        var frontendUrl = _configuration["FrontendUrl"];
-        return Redirect($"{frontendUrl}/Bienvenida/bienvenida.html");
+
+        return IrAlPerfil();
     }
 
+    // ================= GITHUB =================
     [HttpGet("GithubLogin")]
-    public async Task<IActionResult> GithubLogin()
+    public IActionResult GithubLogin()
     {
-        var clientId = _configuration["GitHub:ClientId"];
-        var redirectUri = "http://localhost:5290/api/auth/callback";
+        var clientId = Setting("GitHub:ClientId", "GITHUB_CLIENT_ID");
+        var clientSecret = Setting("GitHub:ClientSecret", "GITHUB_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "GitHub todavía no está configurado. Agrega GitHub:ClientId y GitHub:ClientSecret.");
+        }
+
+        var redirectUri = ProviderRedirectUri("GitHub", "/api/auth/callback");
+        var state = CrearState("github");
 
         var url = "https://github.com/login/oauth/authorize" +
-        $"?client_id={clientId}" +
-        $"&redirect_uri={redirectUri}" +
-        $"&scope=read:user%20user:email";
+                  $"?client_id={Uri.EscapeDataString(clientId)}" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  "&scope=read:user%20user:email" +
+                  $"&state={Uri.EscapeDataString(state)}";
+
         return Redirect(url);
     }
-    [HttpGet("callback")]
-    public async Task<IActionResult> Callback2([FromQuery] string code)
-    {
-        var clientId = _configuration["GitHub:ClientId"];
-        var clientSecret = _configuration["GitHub:ClientSecret"];
 
+    [HttpGet("callback")]
+    public async Task<IActionResult> GithubCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"GitHub rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("github", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de GitHub expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("GitHub no envió el código de autorización.");
+        }
+
+        var clientId = Setting("GitHub:ClientId", "GITHUB_CLIENT_ID");
+        var clientSecret = Setting("GitHub:ClientSecret", "GITHUB_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("GitHub todavía no está configurado.");
+        }
+
+        var redirectUri = ProviderRedirectUri("GitHub", "/api/auth/callback");
         var client = _httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Accept.Add(
-    new MediaTypeWithQualityHeaderValue("application/json")
-    );
+            new MediaTypeWithQualityHeaderValue("application/json"));
 
-        // 1. Solicitar el access token a GitHub
         var respuestaToken = await client.PostAsync(
             "https://github.com/login/oauth/access_token",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientId!,
-                ["client_secret"] = clientSecret!,
-                ["code"] = code
-            })
-        );
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["code"] = code,
+                ["redirect_uri"] = redirectUri
+            }));
 
         if (!respuestaToken.IsSuccessStatusCode)
-            return Unauthorized("No se pudo obtener el token de GitHub.");
+        {
+            return VolverAlLogin("No se pudo obtener el token de GitHub.");
+        }
 
-        var contenidoToken = await respuestaToken.Content.ReadAsStringAsync();
+        using var documentoToken = JsonDocument.Parse(
+            await respuestaToken.Content.ReadAsStringAsync());
 
-        var documentoToken = JsonDocument.Parse(contenidoToken);
+        if (!documentoToken.RootElement.TryGetProperty("access_token", out var tokenProp))
+        {
+            var detalle = documentoToken.RootElement.TryGetProperty("error_description", out var d)
+                ? d.GetString()
+                : "GitHub no proporcionó un token.";
 
-        var token = documentoToken.RootElement
-            .GetProperty("access_token").GetString();
+            return VolverAlLogin(detalle ?? "GitHub no proporcionó un token.");
+        }
 
-        if (string.IsNullOrEmpty(token))
-            return Unauthorized("GitHub no proporcionó un token.");
+        var token = tokenProp.GetString();
 
-        // 2. Consultar información del usuario en GitHub
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return VolverAlLogin("GitHub no proporcionó un token.");
+        }
+
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
-
         client.DefaultRequestHeaders.UserAgent.ParseAdd("RedSocialApp");
-
+        client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/vnd.github+json")
-        );
+            new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-        var respuestaUsuario = await client.GetAsync(
-            "https://api.github.com/user"
-        );
+        var respuestaUsuario = await client.GetAsync("https://api.github.com/user");
 
         if (!respuestaUsuario.IsSuccessStatusCode)
-            return Unauthorized("No se pudo obtener el perfil de GitHub.");
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de GitHub.");
+        }
 
-        var contenidoUsuario = await respuestaUsuario.Content.ReadAsStringAsync();
-
-        var documento = JsonDocument.Parse(contenidoUsuario);
+        using var documento = JsonDocument.Parse(
+            await respuestaUsuario.Content.ReadAsStringAsync());
 
         var root = documento.RootElement;
-        // 3. Extraer información del perfil
-        var githubId = root.GetProperty("id").GetInt64().ToString();
 
-        var username = root.GetProperty("login").GetString();
-
-        var nombre = root.TryGetProperty("name", out var nombreJson)
-            ? nombreJson.GetString()
-            : null;
-
-        var email = root.TryGetProperty("email", out var emailJson)
-            ? emailJson.GetString()
-            : null;
-
-        var biografia = root.TryGetProperty("bio", out var bioJson)
-            ? bioJson.GetString()
-            : null;
-
-        // 4. Buscar la cuenta externa
-        var consulta = await (
-            from c in _context.CuentasExternas
-            where c.ProveedorId == githubId
-               && c.Proveedor == "GitHub"
-            select c
-        ).FirstOrDefaultAsync();
-
-        Usuario usuario;
-
-        if (consulta == null)
+        if (!root.TryGetProperty("id", out var idProp))
         {
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                return BadRequest(
-                    "GitHub no proporcionó un correo. Verifica los permisos user:email."
-                );
-            }
-            // 5. Crear usuario local
-            usuario = new Usuario
-            {
-                User = username ?? "UsuarioGitHub",
-                email = email,
-                Biografia = biografia ?? "",
-                Fecha = DateTime.UtcNow.ToString("O"),
-                Estado = "Activo"
-            };
-
-            _context.Usuarios.Add(usuario);
-
-            await _context.SaveChangesAsync();
-            // 6. Crear relación con GitHub
-            var cuentaExterna = new CuentaExterna
-            {
-                UsuarioId = usuario.Id,
-                Proveedor = "GitHub",
-                ProveedorId = githubId
-            };
-            _context.CuentasExternas.Add(cuentaExterna);
-
-            await _context.SaveChangesAsync();
+            return VolverAlLogin("GitHub no envió el identificador del usuario.");
         }
-        else
+
+        var githubId = idProp.GetInt64().ToString();
+        var username = root.TryGetProperty("login", out var loginProp)
+            ? loginProp.GetString()
+            : null;
+        var nombre = root.TryGetProperty("name", out var nombreProp)
+            ? nombreProp.GetString()
+            : null;
+
+        var email = root.TryGetProperty("email", out var emailProp)
+            ? emailProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(email))
         {
-            usuario = await _context.Usuarios.FindAsync(consulta.UsuarioId);
-
-            if (usuario == null)
-                return Unauthorized("No se encontró el usuario local.");
+            email = await ObtenerEmailGitHub(client);
         }
-        var claims = new List<Claim>
-            {
-            new Claim(
-                ClaimTypes.NameIdentifier,
-                usuario.Id.ToString()
-            ),
-            new Claim(
-                ClaimTypes.Name,
-                usuario.User
-            ),
-            new Claim(
-                ClaimTypes.Email,
-                usuario.email)
-            };
 
-        var identidadclaim = new ClaimsIdentity(
-            claims,
-            CookieAuthenticationDefaults.AuthenticationScheme
-        );
+        var usuario = await ObtenerOCrearUsuario(
+            "GitHub",
+            githubId,
+            nombre ?? username,
+            email);
 
-        var principal = new ClaimsPrincipal(identidadclaim);
-
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            principal
-        );
-        var frontendUrl = _configuration["FrontendUrl"];
-        return Redirect($"{frontendUrl}/Bienvenida/bienvenida.html");
+        await IniciarSesionCookie(usuario, "GitHub");
+        return IrAlPerfil();
     }
-     [HttpGet("dropbox/login")]
+
+    // ================= DROPBOX =================
+    [HttpGet("dropbox/login")]
     public IActionResult DropboxLogin()
     {
-        var clientId = Environment.GetEnvironmentVariable("DROPBOX_CLIENT_ID");
-        var redirectUri = Uri.EscapeDataString(Environment.GetEnvironmentVariable("DROPBOX_REDIRECT_URI") ?? "");
-        var url = $"https://www.dropbox.com/oauth2/authorize?client_id={clientId}&redirect_uri={redirectUri}&response_type=code";
+        var clientId = Setting("Dropbox:ClientId", "DROPBOX_CLIENT_ID");
+        var clientSecret = Setting("Dropbox:ClientSecret", "DROPBOX_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "Dropbox todavía no está configurado. Agrega Dropbox:ClientId y Dropbox:ClientSecret.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Dropbox", "/auth/dropbox/callback");
+        var state = CrearState("dropbox");
+
+        var url = "https://www.dropbox.com/oauth2/authorize" +
+                  $"?client_id={Uri.EscapeDataString(clientId)}" +
+                  "&response_type=code" +
+                  "&token_access_type=online" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  $"&state={Uri.EscapeDataString(state)}";
+
         return Redirect(url);
     }
 
     [HttpGet("dropbox/callback")]
-    public async Task<IActionResult> DropboxCallback([FromQuery] string? code)
+    public Task<IActionResult> DropboxCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
     {
-        if (string.IsNullOrEmpty(code)) return BadRequest("No se recibió el código de Dropbox.");
-
-        var client = _httpClientFactory.CreateClient();
-        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["client_id"] = Environment.GetEnvironmentVariable("DROPBOX_CLIENT_ID") ?? "",
-            ["client_secret"] = Environment.GetEnvironmentVariable("DROPBOX_CLIENT_SECRET") ?? "",
-            ["grant_type"] = "authorization_code",
-            ["code"] = code,
-            ["redirect_uri"] = Environment.GetEnvironmentVariable("DROPBOX_REDIRECT_URI") ?? ""
-        });
-
-        var tokenRes = await client.PostAsync("https://api.dropboxapi.com/oauth2/token", tokenRequest);
-        if (!tokenRes.IsSuccessStatusCode) return Unauthorized("Error al obtener token de Dropbox.");
-
-        using var tokenDoc = JsonDocument.Parse(await tokenRes.Content.ReadAsStringAsync());
-        var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString();
-
-        var userReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/users/get_current_account");
-        userReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var userRes = await client.SendAsync(userReq);
-        if (!userRes.IsSuccessStatusCode) return Unauthorized("Error al obtener perfil de Dropbox.");
-
-        using var userDoc = JsonDocument.Parse(await userRes.Content.ReadAsStringAsync());
-
-        var id = userDoc.RootElement.GetProperty("account_id").GetString() ?? "";
-        var name = userDoc.RootElement.GetProperty("name").GetProperty("display_name").GetString() ?? "UsuarioDropbox";
-        var email = userDoc.RootElement.TryGetProperty("email", out var em) ? em.GetString() ?? "" : "";
-
-        await IniciarSesionCookie(id, name, email, "Dropbox");
-        return Redirect("/login.html");
+        return ProcesarDropbox(code, state, error, errorDescription);
     }
 
-    // ================= FIGMA (LISTA MEDIA) =================
+    // Ruta registrada en la app de Dropbox: /auth/dropbox/callback
+    [HttpGet("/auth/dropbox/callback")]
+    public Task<IActionResult> DropboxCallbackLegacy(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarDropbox(code, state, error, errorDescription);
+    }
+
+    private async Task<IActionResult> ProcesarDropbox(
+        string? code,
+        string? state,
+        string? error,
+        string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"Dropbox rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("dropbox", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de Dropbox expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("Dropbox no envió el código de autorización.");
+        }
+
+        var clientId = Setting("Dropbox:ClientId", "DROPBOX_CLIENT_ID");
+        var clientSecret = Setting("Dropbox:ClientSecret", "DROPBOX_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("Dropbox todavía no está configurado.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Dropbox", "/auth/dropbox/callback");
+        var client = _httpClientFactory.CreateClient();
+
+        var tokenRes = await client.PostAsync(
+            "https://api.dropboxapi.com/oauth2/token",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "authorization_code",
+                ["code"] = code,
+                ["redirect_uri"] = redirectUri
+            }));
+
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el token de Dropbox.");
+        }
+
+        using var tokenDoc = JsonDocument.Parse(
+            await tokenRes.Content.ReadAsStringAsync());
+
+        var accessToken = tokenDoc.RootElement
+            .TryGetProperty("access_token", out var tokenProp)
+            ? tokenProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return VolverAlLogin("Dropbox no proporcionó un token.");
+        }
+
+        var userReq = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://api.dropboxapi.com/2/users/get_current_account");
+        userReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var userRes = await client.SendAsync(userReq);
+
+        if (!userRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de Dropbox.");
+        }
+
+        using var userDoc = JsonDocument.Parse(
+            await userRes.Content.ReadAsStringAsync());
+
+        var id = userDoc.RootElement
+            .TryGetProperty("account_id", out var idProp)
+            ? idProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return VolverAlLogin("Dropbox no envió el identificador del usuario.");
+        }
+
+        var name = userDoc.RootElement.TryGetProperty("name", out var nameProp) &&
+                   nameProp.TryGetProperty("display_name", out var displayProp)
+            ? displayProp.GetString()
+            : null;
+
+        var email = userDoc.RootElement.TryGetProperty("email", out var emailProp)
+            ? emailProp.GetString()
+            : null;
+
+        var usuario = await ObtenerOCrearUsuario("Dropbox", id, name, email);
+        await IniciarSesionCookie(usuario, "Dropbox");
+        return IrAlPerfil();
+    }
+
+    // ================= FIGMA =================
     [HttpGet("figma/login")]
     public IActionResult FigmaLogin()
     {
-        var clientId = Environment.GetEnvironmentVariable("FIGMA_CLIENT_ID");
-        var redirectUri = Uri.EscapeDataString(Environment.GetEnvironmentVariable("FIGMA_REDIRECT_URI") ?? "");
-        var url = $"https://www.figma.com/oauth?client_id={clientId}&redirect_uri={redirectUri}&scope=current_user:read&state=redsocial777&response_type=code";
+        var clientId = Setting("Figma:ClientId", "FIGMA_CLIENT_ID");
+        var clientSecret = Setting("Figma:ClientSecret", "FIGMA_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "Figma todavía no está configurado. Agrega Figma:ClientId y Figma:ClientSecret.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Figma", "/auth/figma/callback");
+        var state = CrearState("figma");
+
+        var url = "https://www.figma.com/oauth" +
+                  $"?client_id={Uri.EscapeDataString(clientId)}" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  "&scope=current_user:read" +
+                  $"&state={Uri.EscapeDataString(state)}" +
+                  "&response_type=code";
+
         return Redirect(url);
     }
 
     [HttpGet("figma/callback")]
-    public async Task<IActionResult> FigmaCallback([FromQuery] string? code)
+    public Task<IActionResult> FigmaCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
     {
-        if (string.IsNullOrEmpty(code)) return BadRequest("No se recibió el código de Figma.");
+        return ProcesarFigma(code, state, error, errorDescription);
+    }
 
-        var clientId = Environment.GetEnvironmentVariable("FIGMA_CLIENT_ID") ?? "";
-        var clientSecret = Environment.GetEnvironmentVariable("FIGMA_CLIENT_SECRET") ?? "";
-        var redirectUri = Environment.GetEnvironmentVariable("FIGMA_REDIRECT_URI") ?? "";
+    // Ruta registrada en la app de Figma: /auth/figma/callback
+    [HttpGet("/auth/figma/callback")]
+    public Task<IActionResult> FigmaCallbackLegacy(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarFigma(code, state, error, errorDescription);
+    }
 
+    private async Task<IActionResult> ProcesarFigma(
+        string? code,
+        string? state,
+        string? error,
+        string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"Figma rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("figma", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de Figma expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("Figma no envió el código de autorización.");
+        }
+
+        var clientId = Setting("Figma:ClientId", "FIGMA_CLIENT_ID");
+        var clientSecret = Setting("Figma:ClientSecret", "FIGMA_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("Figma todavía no está configurado.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Figma", "/auth/figma/callback");
         var client = _httpClientFactory.CreateClient();
-        var tokenReq = new HttpRequestMessage(HttpMethod.Post, "https://api.figma.com/v1/oauth/token");
-        var basicAuth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+
+        var tokenReq = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://api.figma.com/v1/oauth/token");
+
+        var basicAuth = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+
         tokenReq.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
         tokenReq.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -389,32 +465,250 @@ public class AuthController : ControllerBase
         });
 
         var tokenRes = await client.SendAsync(tokenReq);
+
         if (!tokenRes.IsSuccessStatusCode)
         {
-            var err = await tokenRes.Content.ReadAsStringAsync();
-            return Unauthorized($"Error al obtener token de Figma: {err}");
+            return VolverAlLogin("No se pudo obtener el token de Figma.");
         }
 
-        using var tokenDoc = JsonDocument.Parse(await tokenRes.Content.ReadAsStringAsync());
-        var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString();
+        using var tokenDoc = JsonDocument.Parse(
+            await tokenRes.Content.ReadAsStringAsync());
 
-        var userReq = new HttpRequestMessage(HttpMethod.Get, "https://api.figma.com/v1/me");
+        var accessToken = tokenDoc.RootElement
+            .TryGetProperty("access_token", out var tokenProp)
+            ? tokenProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return VolverAlLogin("Figma no proporcionó un token.");
+        }
+
+        var userReq = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://api.figma.com/v1/me");
         userReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
         var userRes = await client.SendAsync(userReq);
-        if (!userRes.IsSuccessStatusCode) return Unauthorized("Error al obtener perfil de Figma.");
 
-        using var userDoc = JsonDocument.Parse(await userRes.Content.ReadAsStringAsync());
+        if (!userRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de Figma.");
+        }
 
-        var id = userDoc.RootElement.TryGetProperty("id", out var idProp) ? idProp.ToString() : "";
-        var name = userDoc.RootElement.TryGetProperty("handle", out var hProp) && hProp.ValueKind == JsonValueKind.String
-            ? hProp.GetString() ?? "UsuarioFigma"
-            : "UsuarioFigma";
-        var email = userDoc.RootElement.TryGetProperty("email", out var emProp) && emProp.ValueKind == JsonValueKind.String
-            ? emProp.GetString() ?? ""
-            : "";
+        using var userDoc = JsonDocument.Parse(
+            await userRes.Content.ReadAsStringAsync());
 
-        await IniciarSesionCookie(id, name, email, "Figma");
-        return Redirect("/login.html");
+        var id = userDoc.RootElement.TryGetProperty("id", out var idProp)
+            ? (idProp.ValueKind == JsonValueKind.String ? idProp.GetString() : idProp.ToString())
+            : null;
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return VolverAlLogin("Figma no envió el identificador del usuario.");
+        }
+
+        var name = userDoc.RootElement.TryGetProperty("handle", out var handleProp) &&
+                   handleProp.ValueKind == JsonValueKind.String
+            ? handleProp.GetString()
+            : null;
+
+        var email = userDoc.RootElement.TryGetProperty("email", out var emailProp) &&
+                    emailProp.ValueKind == JsonValueKind.String
+            ? emailProp.GetString()
+            : null;
+
+        var usuario = await ObtenerOCrearUsuario("Figma", id, name, email);
+        await IniciarSesionCookie(usuario, "Figma");
+        return IrAlPerfil();
+    }
+
+    // ================= X (TWITTER) =================
+    [HttpGet("twitter/login")]
+    public IActionResult TwitterLogin()
+    {
+        var clientId = Setting("Twitter:ClientId", "TWITTER_CLIENT_ID");
+        var clientSecret = Setting("Twitter:ClientSecret", "TWITTER_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "X (Twitter) todavía no está configurado. Agrega Twitter:ClientId y Twitter:ClientSecret.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Twitter", "/auth/twitter/callback");
+        var state = CrearState("twitter");
+
+        // X exige PKCE (S256) para OAuth 2.0. El verifier se guarda en sesión y
+        // se vuelve a enviar al canjear el código por el token.
+        var codeVerifier = CrearCodeVerifier();
+        HttpContext.Session.SetString("oauth_pkce_twitter", codeVerifier);
+        var codeChallenge = CrearCodeChallenge(codeVerifier);
+
+        var url = "https://twitter.com/i/oauth2/authorize" +
+                  "?response_type=code" +
+                  $"&client_id={Uri.EscapeDataString(clientId)}" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  "&scope=users.read%20tweet.read" +
+                  $"&state={Uri.EscapeDataString(state)}" +
+                  $"&code_challenge={Uri.EscapeDataString(codeChallenge)}" +
+                  "&code_challenge_method=S256";
+
+        return Redirect(url);
+    }
+
+    [HttpGet("twitter/callback")]
+    public Task<IActionResult> TwitterCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarTwitter(code, state, error, errorDescription);
+    }
+
+    // Ruta que se registra en el portal de X: /auth/twitter/callback
+    [HttpGet("/auth/twitter/callback")]
+    public Task<IActionResult> TwitterCallbackLegacy(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarTwitter(code, state, error, errorDescription);
+    }
+
+    private async Task<IActionResult> ProcesarTwitter(
+        string? code,
+        string? state,
+        string? error,
+        string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"X (Twitter) rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("twitter", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de X (Twitter) expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("X (Twitter) no envió el código de autorización.");
+        }
+
+        var codeVerifier = HttpContext.Session.GetString("oauth_pkce_twitter");
+        HttpContext.Session.Remove("oauth_pkce_twitter");
+
+        if (string.IsNullOrWhiteSpace(codeVerifier))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de X (Twitter) expiró. Intenta de nuevo.");
+        }
+
+        var clientId = Setting("Twitter:ClientId", "TWITTER_CLIENT_ID");
+        var clientSecret = Setting("Twitter:ClientSecret", "TWITTER_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("X (Twitter) todavía no está configurado.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Twitter", "/auth/twitter/callback");
+        var client = _httpClientFactory.CreateClient();
+
+        var tokenReq = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://api.twitter.com/2/oauth2/token");
+
+        var basicAuth = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+
+        tokenReq.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
+        tokenReq.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["code"] = code,
+            ["grant_type"] = "authorization_code",
+            ["redirect_uri"] = redirectUri,
+            ["code_verifier"] = codeVerifier
+        });
+
+        var tokenRes = await client.SendAsync(tokenReq);
+
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el token de X (Twitter).");
+        }
+
+        using var tokenDoc = JsonDocument.Parse(
+            await tokenRes.Content.ReadAsStringAsync());
+
+        var accessToken = tokenDoc.RootElement
+            .TryGetProperty("access_token", out var tokenProp)
+            ? tokenProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return VolverAlLogin("X (Twitter) no proporcionó un token.");
+        }
+
+        var userReq = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://api.twitter.com/2/users/me");
+
+        userReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var userRes = await client.SendAsync(userReq);
+
+        if (!userRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de X (Twitter).");
+        }
+
+        using var userDoc = JsonDocument.Parse(
+            await userRes.Content.ReadAsStringAsync());
+
+        if (!userDoc.RootElement.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Object)
+        {
+            return VolverAlLogin("X (Twitter) no envió los datos del usuario.");
+        }
+
+        var id = data.TryGetProperty("id", out var idProp) &&
+                 idProp.ValueKind == JsonValueKind.String
+            ? idProp.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return VolverAlLogin("X (Twitter) no envió el identificador del usuario.");
+        }
+
+        var name = data.TryGetProperty("name", out var nameProp) &&
+                   nameProp.ValueKind == JsonValueKind.String
+            ? nameProp.GetString()
+            : null;
+
+        var username = data.TryGetProperty("username", out var usernameProp) &&
+                       usernameProp.ValueKind == JsonValueKind.String
+            ? usernameProp.GetString()
+            : null;
+
+        var usuario = await ObtenerOCrearUsuario(
+            "X",
+            id,
+            name ?? username,
+            null);
+
+        await IniciarSesionCookie(usuario, "X");
+        return IrAlPerfil();
     }
 
     // ================= IDENTIDAD Y LOGOUT =================
@@ -422,7 +716,13 @@ public class AuthController : ControllerBase
     public IActionResult Me()
     {
         if (User.Identity?.IsAuthenticated != true)
-            return Unauthorized(new { autenticado = false, mensaje = "No hay sesión activa." });
+        {
+            return Unauthorized(new
+            {
+                autenticado = false,
+                mensaje = "No hay sesión activa."
+            });
+        }
 
         return Ok(new
         {
@@ -441,17 +741,232 @@ public class AuthController : ControllerBase
         return Ok(new { mensaje = "Sesión cerrada correctamente." });
     }
 
-    private async Task IniciarSesionCookie(string id, string nombre, string email, string proveedor)
+    // ================= HELPERS =================
+    private bool GoogleConfigurado()
+    {
+        var clientId = Setting("Google:ClientId", "GOOGLE_CLIENT_ID");
+        var clientSecret = Setting("Google:ClientSecret", "GOOGLE_CLIENT_SECRET");
+        return !string.IsNullOrWhiteSpace(clientId) &&
+               !string.IsNullOrWhiteSpace(clientSecret);
+    }
+
+    private string? Setting(string key, string environmentVariable)
+    {
+        var value = _configuration[key];
+
+        return !string.IsNullOrWhiteSpace(value)
+            ? value
+            : Environment.GetEnvironmentVariable(environmentVariable);
+    }
+
+    private string ProviderRedirectUri(string provider, string defaultPath)
+    {
+        var configured = _configuration[$"{provider}:RedirectUri"];
+
+        return !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : $"{Request.Scheme}://{Request.Host}{defaultPath}";
+    }
+
+    private string CrearState(string provider)
+    {
+        var state = Guid.NewGuid().ToString("N");
+        HttpContext.Session.SetString($"oauth_state_{provider}", state);
+        return state;
+    }
+
+    private bool ValidarState(string provider, string? state)
+    {
+        var expected = HttpContext.Session.GetString($"oauth_state_{provider}");
+        HttpContext.Session.Remove($"oauth_state_{provider}");
+
+        return !string.IsNullOrWhiteSpace(expected) &&
+               string.Equals(expected, state, StringComparison.Ordinal);
+    }
+
+    private static string CrearCodeVerifier()
+    {
+        Span<byte> bytes = stackalloc byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Base64UrlEncode(bytes);
+    }
+
+    private static string CrearCodeChallenge(string codeVerifier)
+    {
+        var hash = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
+        return Base64UrlEncode(hash);
+    }
+
+    private static string Base64UrlEncode(ReadOnlySpan<byte> bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private IActionResult VolverAlLogin(string mensaje)
+    {
+        return Redirect($"/login.html?error={Uri.EscapeDataString(mensaje)}");
+    }
+
+    private IActionResult IrAlPerfil()
+    {
+        var frontendUrl = _configuration["FrontendUrl"];
+
+        if (!string.IsNullOrWhiteSpace(frontendUrl))
+        {
+            return Redirect($"{frontendUrl.TrimEnd('/')}/Bienvenida/bienvenida.html");
+        }
+
+        return Redirect("/Bienvenida/bienvenida.html");
+    }
+
+    private async Task<Usuario> ObtenerOCrearUsuario(
+        string proveedor,
+        string proveedorId,
+        string? nombre,
+        string? email)
+    {
+        nombre = string.IsNullOrWhiteSpace(nombre)
+            ? $"Usuario {proveedor}"
+            : nombre.Trim();
+
+        email = email?.Trim() ?? "";
+
+        var cuenta = await _context.CuentasExternas
+            .FirstOrDefaultAsync(c =>
+                c.Proveedor == proveedor &&
+                c.ProveedorId == proveedorId);
+
+        Usuario? usuario = null;
+
+        if (cuenta != null)
+        {
+            usuario = await _context.Usuarios.FindAsync(cuenta.UsuarioId);
+        }
+
+        if (usuario == null && !string.IsNullOrWhiteSpace(email))
+        {
+            usuario = await _context.Usuarios
+                .FirstOrDefaultAsync(u => u.email.ToLower() == email.ToLower());
+        }
+
+        if (usuario == null)
+        {
+            usuario = new Usuario
+            {
+                User = nombre,
+                email = email,
+                Biografia = $"Autenticado con {proveedor}",
+                Fecha = DateTime.UtcNow.ToString("O"),
+                Estado = "Activo"
+            };
+
+            _context.Usuarios.Add(usuario);
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            usuario.User = nombre;
+
+            // X (Twitter) no entrega correo con el alcance users.read. No se debe
+            // borrar el correo que el usuario ya tenía guardado.
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                usuario.email = email;
+            }
+
+            if (string.IsNullOrWhiteSpace(usuario.Biografia))
+            {
+                usuario.Biografia = $"Autenticado con {proveedor}";
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        if (cuenta == null)
+        {
+            _context.CuentasExternas.Add(new CuentaExterna
+            {
+                ProveedorId = proveedorId,
+                Proveedor = proveedor,
+                UsuarioId = usuario.Id
+            });
+
+            await _context.SaveChangesAsync();
+        }
+        else if (cuenta.UsuarioId != usuario.Id)
+        {
+            cuenta.UsuarioId = usuario.Id;
+            await _context.SaveChangesAsync();
+        }
+
+        return usuario;
+    }
+
+    private async Task<string?> ObtenerEmailGitHub(HttpClient client)
+    {
+        var respuesta = await client.GetAsync("https://api.github.com/user/emails");
+
+        if (!respuesta.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var documento = JsonDocument.Parse(
+            await respuesta.Content.ReadAsStringAsync());
+
+        if (documento.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var correo in documento.RootElement.EnumerateArray())
+        {
+            var primario = correo.TryGetProperty("primary", out var primarioProp) &&
+                           primarioProp.ValueKind == JsonValueKind.True;
+
+            var verificado = correo.TryGetProperty("verified", out var verificadoProp) &&
+                             verificadoProp.ValueKind == JsonValueKind.True;
+
+            if (primario && verificado &&
+                correo.TryGetProperty("email", out var emailProp))
+            {
+                return emailProp.GetString();
+            }
+        }
+
+        foreach (var correo in documento.RootElement.EnumerateArray())
+        {
+            var verificado = correo.TryGetProperty("verified", out var verificadoProp) &&
+                             verificadoProp.ValueKind == JsonValueKind.True;
+
+            if (verificado && correo.TryGetProperty("email", out var emailProp))
+            {
+                return emailProp.GetString();
+            }
+        }
+
+        return null;
+    }
+
+    private async Task IniciarSesionCookie(Usuario usuario, string proveedor)
     {
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, id),
-            new Claim(ClaimTypes.Name, nombre),
-            new Claim(ClaimTypes.Email, email),
-            new Claim("proveedor", proveedor)
+            new(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+            new(ClaimTypes.Name, usuario.User),
+            new(ClaimTypes.Email, usuario.email ?? ""),
+            new("proveedor", proveedor)
         };
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+        var identity = new ClaimsIdentity(
+            claims,
+            CookieAuthenticationDefaults.AuthenticationScheme);
+
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity));}
+            new ClaimsPrincipal(identity));
+    }
 }

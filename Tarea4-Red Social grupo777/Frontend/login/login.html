@@ -4,77 +4,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Social - Iniciar sesión</title>
+    <title>Red Social | Iniciar sesión</title>
     <link rel="stylesheet" href="login.css">
-    <style>
-        body {
-            font-family: sans-serif;
-            max-width: 480px;
-            margin: 50px auto;
-            text-align: center;
-        }
-
-        button,
-        a.btn {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 16px;
-            text-decoration: none;
-            cursor: pointer;
-            box-sizing: border-box;
-        }
-
-        .dropbox {
-            background: #0061FF;
-        }
-
-        .figma {
-            background: #A259FF;
-        }
-
-        .logout {
-            background: #d9534f;
-        }
-
-        #perfil {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            text-align: left;
-            background: #f9f9f9;
-        }
-    </style>
 </head>
 
 <body>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
 
-    <main class="contenedor">
-        <section class="login">
-            <h1>Red Social</h1>
-            <p>Inicia sesión para formar parte de nuestra comunidad.</p>
+    <main class="login-shell">
+        <section class="login-card">
+            <header class="brand">
+                <div class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="6" cy="6" r="2.4"></circle>
+                        <circle cx="18" cy="6" r="2.4"></circle>
+                        <circle cx="12" cy="18" r="2.4"></circle>
+                        <path d="M8.1 7.4 10.4 16"></path>
+                        <path d="M15.9 7.4 13.6 16"></path>
+                        <path d="M8.4 6h7.2"></path>
+                    </svg>
+                </div>
+                <h1>Red Social</h1>
+                <p>Conecta, comparte y descubre.</p>
+            </header>
 
-            <button id="googleLogin">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
-                Continuar con Google
-            </button>
-            <button id="githubLogin">
-                <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub">
-                Continuar con GitHub
-            </button>
-            <a class="btn dropbox" href="http://localhost:5290/api/Auth/dropbox/login">Iniciar sesión con Dropbox</a>
-            <a class="btn figma" href="http://localhost:5290/api/Auth/figma/login">Iniciar sesión con Figma</a>
+            <div id="alerta" class="alerta" role="alert" hidden></div>
 
-            <div id="perfil">Verificando sesión...</div>
-            <button class="logout" onclick="cerrarSesion()">Cerrar sesión</button>
-            <p class="informacion" id="mensaje">
-                Al continuar, podrás iniciar sesión o crear una cuenta.
-            </p>
+            <div id="opcionesLogin" class="opciones">
+                <p class="opciones-titulo">Inicia sesión con</p>
+
+                <button id="googleLogin" class="btn btn-google" type="button">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 48 48">
+                            <path fill="#EA4335"
+                                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                            <path fill="#4285F4"
+                                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                            <path fill="#FBBC05"
+                                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                            <path fill="#34A853"
+                                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                        </svg>
+                    </span>
+                    <span class="btn-text">Continuar con Google</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </button>
+
+                <button id="githubLogin" class="btn btn-github" type="button">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+                        </svg>
+                    </span>
+                    <span class="btn-text">Continuar con GitHub</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </button>
+
+                <a id="dropboxLogin" class="btn btn-dropbox" href="/api/Auth/dropbox/login">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M6 1.807L0 5.629l6 3.822 6.001-3.822L6 1.807zM18 1.807l-6 3.822 6 3.822 6-3.822-6-3.822zM0 13.274l6 3.822 6.001-3.822L6 9.452l-6 3.822zM18 9.452l-6 3.822 6 3.822 6-3.822-6-3.822zM6 18.371l6.001 3.822 6-3.822-6-3.822L6 18.371z" />
+                        </svg>
+                    </span>
+                    <span class="btn-text">Continuar con Dropbox</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a id="figmaLogin" class="btn btn-figma" href="/api/Auth/figma/login">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M8.148 0h4.588v8.981H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0zm0 10.981h4.588v8.981H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.491 4.49-4.491zm0 10.981h4.588V24c0 2.503-2.047 4.539-4.563 4.539-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49zm6.117-21.962h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491h-4.588V0zm0 10.981h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491h-4.588v-8.981zm0 10.981h4.588c2.476 0 4.49 2.014 4.49 4.49S21.329 24 18.853 24h-4.588v-8.981z" />
+                        </svg>
+                    </span>
+                    <span class="btn-text">Continuar con Figma</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </a>
+
+                <a id="twitterLogin" class="btn btn-x" href="/api/Auth/twitter/login">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z" />
+                        </svg>
+                    </span>
+                    <span class="btn-text">Continuar con X</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </a>
+            </div>
+
+            <div id="perfil" class="perfil" hidden>
+                <div class="perfil-card">
+                    <div id="perfilAvatar" class="perfil-avatar">U</div>
+                    <div class="perfil-datos">
+                        <h2 id="perfilNombre">Usuario</h2>
+                        <p id="perfilEmail">Sin correo</p>
+                    </div>
+                    <span id="perfilProveedor" class="perfil-proveedor">Sesión</span>
+                </div>
+
+                <button id="continuar" class="btn btn-continuar" type="button">
+                    <span class="btn-text">Ir a mi perfil</span>
+                    <span class="btn-arrow" aria-hidden="true">→</span>
+                </button>
+
+                <button id="logout" class="btn btn-logout" type="button">
+                    Cerrar sesión
+                </button>
+            </div>
+
+            <footer class="legal">
+                Al continuar aceptas nuestros términos y política de privacidad.
+            </footer>
         </section>
     </main>
 
