@@ -77,6 +77,9 @@ public class ImagenesPublicacionController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (id <= 0)
+            return BadRequest(new { mensaje = "El id es obligatorio." });
+
         var imagen = await _context.ImagenesPublicacion.FindAsync(id);
         if (imagen == null)
             return NotFound(new { mensaje = "Imagen no encontrada." });
