@@ -12,6 +12,8 @@ services:
       FrontendUrl: "http://localhost:${FRONTEND_PORT:-5500}"
       Twitter__ClientId: "${TWITTER_CLIENT_ID:-RXdIX1BRb3lzSUpueXVza2FkQW06MTpjaQ}"
       Twitter__ClientSecret: "${TWITTER_CLIENT_SECRET:-zX1noBHXcpTEeY2c8JzJqmHlpRFcI2uJfn1HAQwzT12JpS1Emk}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-1031065320544-094ro9psb9o6k7m08puv7fca4lmcq9hk.apps.googleusercontent.com}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
 
     volumes:
       - claves-dataprotection:/root/.aspnet/DataProtection-Keys

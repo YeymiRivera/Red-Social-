@@ -104,24 +104,37 @@ Puedes abrir el login desde:
 - Backend/Nginx: <http://localhost:5290/login.html>
 - Contenedor del frontend: <http://localhost:5500/login/login.html>
 
-GitHub, Dropbox, Figma y X (Twitter) ya están configurados en `appsettings.Development.json` (ejecución local) y `appsettings.Production.json` (Docker).
+GitHub, Dropbox, Figma y X (Twitter) ya están configurados en `appsettings.Development.json` (ejecución local) y `appsettings.Production.json` (Docker). Google tiene el **Client ID** configurado, pero el **Client Secret** no se guarda en el repositorio porque GitHub bloquea los secretos publicados.
 
-La URL de callback que debe estar registrada en el portal de X es:
+Las URLs de callback registradas en los portales de los proveedores son:
 
 ```text
+http://localhost:5290/signin-google
 http://localhost:5290/auth/twitter/callback
 ```
 
-### Configurar Google
+### Google
 
-Google es el único proveedor que necesita credenciales propias:
+El Client Secret se configura una sola vez en cada máquina, fuera de Git:
 
-1. Entra a <https://console.cloud.google.com/apis/credentials>.
-2. Crea un proyecto y configura la pantalla de consentimiento OAuth (tipo Externo). En modo de prueba agrega tu correo como usuario de prueba.
-3. Crea una credencial **ID de cliente de OAuth** de tipo **Aplicación web**.
-4. Agrega como URI de redirección autorizado: `http://localhost:5290/signin-google`.
-5. Copia el Client ID y el Client Secret en el bloque `Google` de `appsettings.Development.json` y `appsettings.Production.json`, o define las variables de entorno `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`.
-6. Reinicia la aplicación o vuelve a levantar los contenedores.
+**Ejecución local con `dotnet run`:**
+
+```bash
+cd "Tarea4-Red Social grupo777"
+dotnet user-secrets set "Google:ClientSecret" "TU_CLIENT_SECRET"
+```
+
+**Docker:**
+
+```bash
+cd /home/gerson/Red-Social-
+printf '\nGOOGLE_CLIENT_SECRET=TU_CLIENT_SECRET\n' >> .env
+docker compose -f contructor.yml up -d --build
+```
+
+El archivo `.env` está en `.gitignore`, así que el secreto no se sube.
+
+En <https://console.cloud.google.com/apis/credentials> verifica que el URI de redirección autorizado sea `http://localhost:5290/signin-google` y que tu correo esté como usuario de prueba si la pantalla de consentimiento está en modo de prueba.
 
 ## Arrancar desde la imagen local (Despliegue)
 
