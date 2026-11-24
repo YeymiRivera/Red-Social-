@@ -146,6 +146,9 @@ builder.Services.AddOptions<ScalarOptions>().BindConfiguration("Scalar");
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+// Sirve wwwroot/index.html como página pública en "/".
+app.UseDefaultFiles();
+
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseStaticFiles();
