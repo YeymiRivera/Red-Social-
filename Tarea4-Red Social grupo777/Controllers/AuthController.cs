@@ -711,6 +711,183 @@ public class AuthController : ControllerBase
         return IrAlPerfil();
     }
 
+    // ================= TIKTOK =================
+    [HttpGet("tiktok/login")]
+    public IActionResult TikTokLogin()
+    {
+        var clientKey = Setting("TikTok:ClientKey", "TIKTOK_CLIENT_KEY");
+        var clientSecret = Setting("TikTok:ClientSecret", "TIKTOK_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientKey) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "TikTok todavía no está configurado. Solicita las credenciales del Sandbox a Gerson.");
+        }
+
+        var redirectUri = NormalizarCallbackTikTok(
+            Setting("TikTok:RedirectUri", "TIKTOK_REDIRECT_URI"));
+
+        if (string.IsNullOrWhiteSpace(redirectUri) ||
+            !redirectUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return VolverAlLogin(
+                "TikTok requiere un callback HTTPS público. Configura TIKTOK_REDIRECT_URI.");
+        }
+
+        var state = CrearState("tiktok");
+
+        var url = "https://www.tiktok.com/v2/auth/authorize/" +
+                  $"?client_key={Uri.EscapeDataString(clientKey)}" +
+                  "&response_type=code" +
+                  "&scope=user.info.basic" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  $"&state={Uri.EscapeDataString(state)}";
+
+        return Redirect(url);
+    }
+
+    [HttpGet("tiktok/callback")]
+    public Task<IActionResult> TikTokCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? scopes,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarTikTok(code, state, error, errorDescription);
+    }
+
+    // Ruta pública que se registra en TikTok Developers (Login Kit, Web).
+    [HttpGet("/auth/tiktok/callback")]
+    public Task<IActionResult> TikTokCallbackPublic(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? scopes,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarTikTok(code, state, error, errorDescription);
+    }
+
+    private async Task<IActionResult> ProcesarTikTok(
+        string? code,
+        string? state,
+        string? error,
+        string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"TikTok rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("tiktok", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de TikTok expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("TikTok no envió el código de autorización.");
+        }
+
+        var clientKey = Setting("TikTok:ClientKey", "TIKTOK_CLIENT_KEY");
+        var clientSecret = Setting("TikTok:ClientSecret", "TIKTOK_CLIENT_SECRET");
+        var redirectUri = NormalizarCallbackTikTok(
+            Setting("TikTok:RedirectUri", "TIKTOK_REDIRECT_URI"));
+
+        if (string.IsNullOrWhiteSpace(clientKey) ||
+            string.IsNullOrWhiteSpace(clientSecret) ||
+            string.IsNullOrWhiteSpace(redirectUri))
+        {
+            return VolverAlLogin("TikTok todavía no está configurado.");
+        }
+
+        var client = _httpClientFactory.CreateClient();
+
+        var tokenRes = await client.PostAsync(
+            "https://open.tiktokapis.com/v2/oauth/token/",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_key"] = clientKey,
+                ["client_secret"] = clientSecret,
+                ["code"] = code,
+                ["grant_type"] = "authorization_code",
+                ["redirect_uri"] = redirectUri
+            }));
+
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el token de TikTok.");
+        }
+
+        using var tokenDoc = JsonDocument.Parse(
+            await tokenRes.Content.ReadAsStringAsync());
+
+        var accessToken = tokenDoc.RootElement
+            .TryGetProperty("access_token", out var tokenProp) &&
+            tokenProp.ValueKind == JsonValueKind.String
+                ? tokenProp.GetString()
+                : null;
+
+        var openId = tokenDoc.RootElement
+            .TryGetProperty("open_id", out var openIdProp) &&
+            openIdProp.ValueKind == JsonValueKind.String
+                ? openIdProp.GetString()
+                : null;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return VolverAlLogin("TikTok no proporcionó un token de acceso.");
+        }
+
+        if (string.IsNullOrWhiteSpace(openId))
+        {
+            return VolverAlLogin("TikTok no proporcionó el identificador del usuario.");
+        }
+
+        var userReq = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name");
+
+        userReq.Headers.Authorization =
+            new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var userRes = await client.SendAsync(userReq);
+
+        if (!userRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de TikTok.");
+        }
+
+        using var userDoc = JsonDocument.Parse(
+            await userRes.Content.ReadAsStringAsync());
+
+        string? displayName = null;
+
+        if (userDoc.RootElement.TryGetProperty("data", out var data) &&
+            data.ValueKind == JsonValueKind.Object &&
+            data.TryGetProperty("user", out var user) &&
+            user.ValueKind == JsonValueKind.Object &&
+            user.TryGetProperty("display_name", out var nombreProp) &&
+            nombreProp.ValueKind == JsonValueKind.String)
+        {
+            displayName = nombreProp.GetString();
+        }
+
+        // TikTok con user.info.basic no entrega correo: se pasa null a propósito.
+        var usuario = await ObtenerOCrearUsuario(
+            "TikTok",
+            openId,
+            displayName ?? openId,
+            null);
+
+        await IniciarSesionCookie(usuario, "TikTok");
+        return IrAlPerfil();
+    }
+
     // ================= IDENTIDAD Y LOGOUT =================
     [HttpGet("me")]
     public IActionResult Me()
@@ -757,6 +934,18 @@ public class AuthController : ControllerBase
         return !string.IsNullOrWhiteSpace(value)
             ? value
             : Environment.GetEnvironmentVariable(environmentVariable);
+    }
+
+    // TikTok valida la redirect_uri registrada con barra final. La normalizamos
+    // aquí para que el intercambio de código use exactamente el mismo valor.
+    private static string? NormalizarCallbackTikTok(string? redirectUri)
+    {
+        if (string.IsNullOrWhiteSpace(redirectUri))
+            return null;
+
+        return redirectUri.EndsWith("/", StringComparison.Ordinal)
+            ? redirectUri
+            : redirectUri + "/";
     }
 
     private string ProviderRedirectUri(string provider, string defaultPath)

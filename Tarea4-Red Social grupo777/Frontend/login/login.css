@@ -263,6 +263,15 @@ body::before {
     box-shadow: 0 12px 32px rgba(232, 238, 252, 0.12);
 }
 
+.btn-tiktok {
+    background: linear-gradient(135deg, #010101, #2536c8);
+    box-shadow: 0 10px 30px rgba(37, 54, 200, 0.22);
+}
+
+.btn-tiktok:hover {
+    box-shadow: 0 14px 34px rgba(37, 54, 200, 0.35);
+}
+
 .perfil {
     text-align: center;
 }

@@ -47,10 +47,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const dropbox = document.getElementById("dropboxLogin");
     const figma = document.getElementById("figmaLogin");
     const twitter = document.getElementById("twitterLogin");
+    const tiktok = document.getElementById("tiktokLogin");
 
     if (dropbox) dropbox.href = `${API_URL}/api/Auth/dropbox/login`;
     if (figma) figma.href = `${API_URL}/api/Auth/figma/login`;
     if (twitter) twitter.href = `${API_URL}/api/Auth/twitter/login`;
+    if (tiktok) tiktok.href = `${API_URL}/api/Auth/tiktok/login`;
 
     const google = document.getElementById("googleLogin");
     const github = document.getElementById("githubLogin");
@@ -75,6 +77,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     twitter?.addEventListener("click", () => {
         ponerCargando(twitter, "Conectando con X...");
+    });
+
+    tiktok?.addEventListener("click", () => {
+        ponerCargando(tiktok, "Conectando con TikTok...");
     });
 
     document.getElementById("continuar")?.addEventListener("click", () => {
