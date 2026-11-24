@@ -48,6 +48,18 @@ public class CategoriasPublicacionController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = nueva.Id }, nueva);
     }
 
+    // Duplicado intencional: demuestra el conflicto de rutas POST; no usar en producción.
+    [HttpPost]
+    public async Task<IActionResult> CreateDuplicado([FromBody] CategoriaPublicacion nueva)
+    {
+        nueva.Id = 0;
+        nueva.Activo = true;
+        _context.CategoriasPublicacion.Add(nueva);
+        await _context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetById), new { id = nueva.Id }, nueva);
+    }
+
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] CategoriaPublicacion editada)
     {
