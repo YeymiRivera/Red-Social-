@@ -63,3 +63,15 @@ public class HashtagsController : ControllerBase
         return Ok(new { mensaje = "Hashtag marcado como inactivo (soft delete).", id = item.Id, activo = item.Activo });
     }
 }
+
+// Aporte de prueba con conflicto intencional: mismo método POST y misma ruta base
+[HttpPost]
+public async Task<IActionResult> CreateDuplicado([FromBody] Hashtag duplicado)
+{
+    duplicado.Id = 0;
+    duplicado.FechaCreacion = DateTime.UtcNow;
+    duplicado.Activo = true;
+    _context.Hashtags.Add(duplicado);
+    await _context.SaveChangesAsync();
+    return Ok(duplicado);
+}
