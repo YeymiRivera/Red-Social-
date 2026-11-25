@@ -1,47 +1,74 @@
-// Si la página la sirve el frontend (contenedor Nginx en 5500), la API vive
-// en el puerto 5290. Si la sirve el propio backend, usamos su mismo origen.
-const API_URL = (() => {
-    if (window.API_URL) return window.API_URL;
 
-    const { protocol, hostname, port } = window.location;
-
-    if (port === "5500") {
-        return `${protocol}//${hostname}:5290`;
-    }
-
-    return window.location.origin;
-})();
-
+const API_URL = (window.APP_CONFIG && window.APP_CONFIG.API_URL) || "http://localhost:5290";
 const alerta = document.getElementById("alerta");
 const opcionesLogin = document.getElementById("opcionesLogin");
 const perfil = document.getElementById("perfil");
 
+// Conservamos la solicitud original de OpenIddict.
+const parametros = new URLSearchParams(window.location.search);
+const returnUrl = parametros.get("returnUrl");
+
+// Construye las direcciones de los proveedores.
+function crearUrlLogin(endpoint) {
+    const url = new URL(endpoint, API_URL);
+
+    if (returnUrl) {
+        url.searchParams.set("returnUrl", returnUrl);
+    }
+
+    return url.toString();
+}
+
 function mostrarError(mensaje) {
     if (!alerta) return;
+
     alerta.textContent = mensaje;
     alerta.hidden = false;
 }
 
 function ponerCargando(boton, texto) {
     if (!boton) return;
+
     boton.disabled = true;
+
     const icono = boton.querySelector(".btn-icon");
+
     if (icono) {
         icono.innerHTML = '<span class="spinner"></span>';
     }
+
     const etiqueta = boton.querySelector(".btn-text");
+
     if (etiqueta) {
         etiqueta.textContent = texto;
     }
 }
 
+// Redirige al proveedor de autenticación.
+function iniciarLogin(boton, endpoint, proveedor) {
+    ponerCargando(boton, `Conectando con ${proveedor}...`);
+    window.location.href = crearUrlLogin(endpoint);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-    const parametros = new URLSearchParams(window.location.search);
+    // Si la página se abrió sin una solicitud de OpenIddict (sin returnUrl) no habrá
+    // access token al terminar. Si estamos en el frontend (Live Server / Docker),
+    // volvemos a index.html, que inicia el flujo correcto.
+    if (!returnUrl && window.location.origin !== new URL(API_URL).origin) {
+        window.location.replace(new URL("../index.html", window.location.href).href);
+        return;
+    }
+
+    if (!returnUrl) {
+        mostrarError(
+            "Abre index.html (Live Server) y pulsa «Iniciar sesión» para obtener un access token."
+        );
+    }
+
     const error = parametros.get("error");
 
     if (error) {
         mostrarError(error);
-        window.history.replaceState({}, "", window.location.pathname);
     }
 
     const dropbox = document.getElementById("dropboxLogin");
@@ -61,31 +88,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const google = document.getElementById("googleLogin");
     const github = document.getElementById("githubLogin");
 
-    google?.addEventListener("click", () => {
-        ponerCargando(google, "Conectando con Google...");
-        window.location.href = `${API_URL}/api/Auth/GoogleLogin`;
-    });
+    // Configuramos los enlaces de los proveedores.
+    if (dropbox) {
+        dropbox.href = crearUrlLogin("/api/Auth/dropbox/login");
 
-    github?.addEventListener("click", () => {
-        ponerCargando(github, "Conectando con GitHub...");
-        window.location.href = `${API_URL}/api/Auth/GithubLogin`;
-    });
+        dropbox.addEventListener("click", () => {
+            ponerCargando(dropbox, "Conectando con Dropbox...");
+        });
+    }
 
-    dropbox?.addEventListener("click", () => {
-        ponerCargando(dropbox, "Conectando con Dropbox...");
-    });
+    if (figma) {
+        figma.href = crearUrlLogin("/api/Auth/figma/login");
 
-    figma?.addEventListener("click", () => {
-        ponerCargando(figma, "Conectando con Figma...");
-    });
-
-    twitter?.addEventListener("click", () => {
-        ponerCargando(twitter, "Conectando con X...");
-    });
-
-    tiktok?.addEventListener("click", () => {
-        ponerCargando(tiktok, "Conectando con TikTok...");
-    });
+        figma.addEventListener("click", () => {
+            ponerCargando(figma, "Conectando con Figma...");
+        });
+    }
 
     discord?.addEventListener("click", () => {
         ponerCargando(discord, "Conectando con Discord...");
@@ -99,43 +117,57 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.href = `${API_URL}/Bienvenida/bienvenida.html`;
     });
 
-    document.getElementById("logout")?.addEventListener("click", async () => {
-        await fetch(`${API_URL}/api/Auth/logout`, {
-            method: "POST",
-            credentials: "include"
+        twitter.addEventListener("click", () => {
+            ponerCargando(twitter, "Conectando con X...");
         });
+    }
 
-        window.location.href = `${API_URL}/login.html`;
+    if (tiktok) {
+        tiktok.href = crearUrlLogin("/api/Auth/tiktok/login");
+
+        tiktok.addEventListener("click", () => {
+            ponerCargando(tiktok, "Conectando con TikTok...");
+        });
+    }
+
+    // Google.
+    google?.addEventListener("click", (evento) => {
+        evento.preventDefault();
+
+        iniciarLogin(
+            google,
+            "/api/Auth/GoogleLogin",
+            "Google"
+        );
     });
 
-    cargarPerfil();
+    // GitHub.
+    github?.addEventListener("click", (evento) => {
+        evento.preventDefault();
+
+        iniciarLogin(
+            github,
+            "/api/Auth/GithubLogin",
+            "GitHub"
+        );
+    });
+
+    // Cerrar sesión local.
+    document.getElementById("logout")?.addEventListener("click", async (evento) => {
+        const boton = evento.currentTarget;
+
+        ponerCargando(boton, "Cerrando sesión...");
+
+        try {
+            await fetch(`${API_URL}/api/Auth/logout`, {
+                method: "POST",
+                credentials: "include"
+            });
+        } catch (error) {
+            console.error("Error al cerrar sesión:", error);
+        } finally {
+            window.location.href = `${API_URL}/login.html`;
+        }
+    });
+
 });
-
-async function cargarPerfil() {
-    try {
-        const respuesta = await fetch(`${API_URL}/api/Auth/me`, {
-            credentials: "include"
-        });
-
-        if (!respuesta.ok) return;
-
-        const datos = await respuesta.json();
-
-        if (!datos.autenticado) return;
-
-        opcionesLogin.hidden = true;
-        perfil.hidden = false;
-
-        const nombre = datos.nombre || "Usuario";
-        const email = datos.email || "Sin correo";
-        const proveedor = datos.proveedor || "Sesión";
-
-        document.getElementById("perfilNombre").textContent = nombre;
-        document.getElementById("perfilEmail").textContent = email;
-        document.getElementById("perfilProveedor").textContent = proveedor;
-        document.getElementById("perfilAvatar").textContent =
-            nombre.charAt(0).toUpperCase();
-    } catch {
-        // Si la API no responde, se dejan visibles los botones de login.
-    }
-}
