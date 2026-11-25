@@ -52,25 +52,7 @@ services:
       replicas: ${BACKEND_REPLICAS:-3}
     restart: unless-stopped
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_HTTP_PORTS: 5290
-      REDIS_CONNECTION: redis:6379
-      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}"
-      FrontendUrl: "http://localhost:${FRONTEND_PORT:-5500}"
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
-      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-}"
-      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-}"
-      DROPBOX_CLIENT_ID: "${DROPBOX_CLIENT_ID:-}"
-      DROPBOX_CLIENT_SECRET: "${DROPBOX_CLIENT_SECRET:-}"
-      FIGMA_CLIENT_ID: "${FIGMA_CLIENT_ID:-}"
-      FIGMA_CLIENT_SECRET: "${FIGMA_CLIENT_SECRET:-}"
-      TWITTER_CLIENT_ID: "${TWITTER_CLIENT_ID:-}"
-      TWITTER_CLIENT_SECRET: "${TWITTER_CLIENT_SECRET:-}"
-      TIKTOK_CLIENT_KEY: "${TIKTOK_CLIENT_KEY:-}"
-      TIKTOK_CLIENT_SECRET: "${TIKTOK_CLIENT_SECRET:-}"
-      TIKTOK_REDIRECT_URI: "${TIKTOK_REDIRECT_URI:-}"
-
+      <<: *backend-env
     volumes:
       # Claves de Data Protection compartidas: todas las réplicas descifran las
       # mismas cookies (sesión, login, state de OAuth).
@@ -85,11 +67,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       migraciones:
         condition: service_completed_successfully
-
     networks:
       - red-social
 
@@ -148,18 +127,6 @@ services:
     networks:
       - red-social
 
-  migraciones:
-    image: redsocial
-    pull_policy: never
-    command: ["--migrar"]
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - red-social
   postgres:
     image: postgres:17
     container_name: usuario-db
@@ -167,7 +134,10 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-RedsocialDB}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-11ye}
+    ports:
+      # Solo desde esta máquina: sirve para `dotnet run` (POSTGRES_HOST_PORT).
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - datos-postgres:/var/lib/postgresql/data
     healthcheck:

@@ -75,15 +75,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const figma = document.getElementById("figmaLogin");
     const twitter = document.getElementById("twitterLogin");
     const tiktok = document.getElementById("tiktokLogin");
-    const discord = document.getElementById("discordLogin");
-    const slack = document.getElementById("slackLogin");
-
-    if (dropbox) dropbox.href = `${API_URL}/api/Auth/dropbox/login`;
-    if (figma) figma.href = `${API_URL}/api/Auth/figma/login`;
-    if (twitter) twitter.href = `${API_URL}/api/Auth/twitter/login`;
-    if (tiktok) tiktok.href = `${API_URL}/api/Auth/tiktok/login`;
-    if (discord) discord.href = `${API_URL}/api/Auth/discord/login`;
-    if (slack) slack.href = `${API_URL}/api/Auth/slack/login`;
 
     const google = document.getElementById("googleLogin");
     const github = document.getElementById("githubLogin");
@@ -105,17 +96,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    discord?.addEventListener("click", () => {
-        ponerCargando(discord, "Conectando con Discord...");
-    });
-
-    slack?.addEventListener("click", () => {
-        ponerCargando(slack, "Conectando con Slack...");
-    });
-
-    document.getElementById("continuar")?.addEventListener("click", () => {
-        window.location.href = `${API_URL}/Bienvenida/bienvenida.html`;
-    });
+    if (twitter) {
+        twitter.href = crearUrlLogin("/api/Auth/twitter/login");
 
         twitter.addEventListener("click", () => {
             ponerCargando(twitter, "Conectando con X...");
