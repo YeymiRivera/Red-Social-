@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -850,37 +852,61 @@ public class AuthController : ControllerBase
                 ["redirect_uri"] = redirectUri
             }));
 
-        if (!tokenRes.IsSuccessStatusCode)
+        var tokenCuerpo = await tokenRes.Content.ReadAsStringAsync();
+
+        static string? TextoTikTok(JsonElement raiz, string nombre) =>
+            raiz.TryGetProperty(nombre, out var valor) &&
+            valor.ValueKind == JsonValueKind.String
+                ? valor.GetString()
+                : null;
+
+        static string DetalleErrorTikTok(string cuerpo)
         {
-            return VolverAlLogin(
-                "No se pudo obtener el token de TikTok. " + await DetalleError(tokenRes));
+            try
+            {
+                using var doc = JsonDocument.Parse(cuerpo);
+                var partes = new List<string>();
+
+                foreach (var nombre in new[] { "error", "error_description", "log_id" })
+                {
+                    var valor = TextoTikTok(doc.RootElement, nombre);
+                    if (!string.IsNullOrWhiteSpace(valor))
+                        partes.Add(valor);
+                }
+
+                return string.Join(" - ", partes);
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
-        using var tokenDoc = JsonDocument.Parse(
-            await tokenRes.Content.ReadAsStringAsync());
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            var detalle = DetalleErrorTikTok(tokenCuerpo);
+            if (detalle.Length > 300)
+                detalle = detalle[..300];
 
-        var accessToken = tokenDoc.RootElement
-            .TryGetProperty("access_token", out var tokenProp) &&
-            tokenProp.ValueKind == JsonValueKind.String
-                ? tokenProp.GetString()
-                : null;
+            return VolverAlLogin(string.IsNullOrWhiteSpace(detalle)
+                ? "No se pudo obtener el token de TikTok."
+                : $"No se pudo obtener el token de TikTok: {detalle}");
+        }
 
-        var openId = tokenDoc.RootElement
-            .TryGetProperty("open_id", out var openIdProp) &&
-            openIdProp.ValueKind == JsonValueKind.String
-                ? openIdProp.GetString()
-                : null;
+        using var tokenDoc = JsonDocument.Parse(tokenCuerpo);
+
+        var accessToken = TextoTikTok(tokenDoc.RootElement, "access_token");
+        var openId = TextoTikTok(tokenDoc.RootElement, "open_id");
 
         if (string.IsNullOrWhiteSpace(accessToken))
         {
-            // TikTok responde 200 con {"error":...} cuando el código o el redirect_uri no valen.
-            var detalleTikTok = tokenDoc.RootElement.TryGetProperty("error_description", out var ed) &&
-                                ed.ValueKind == JsonValueKind.String
-                ? ed.GetString()
-                : null;
+            var detalle = DetalleErrorTikTok(tokenCuerpo);
+            if (detalle.Length > 300)
+                detalle = detalle[..300];
 
-            return VolverAlLogin(
-                "TikTok no proporcionó un token de acceso. " + detalleTikTok);
+            return VolverAlLogin(string.IsNullOrWhiteSpace(detalle)
+                ? "TikTok no proporcionó un token de acceso."
+                : $"TikTok no proporcionó un token de acceso: {detalle}");
         }
 
         if (string.IsNullOrWhiteSpace(openId))
@@ -940,6 +966,562 @@ public class AuthController : ControllerBase
 
         return await FinalizarLogin(usuario, "TikTok", destino);
     }
+
+    // ================= DISCORD =================
+    [HttpGet("discord/login")]
+    public IActionResult DiscordLogin()
+    {
+        var clientId = Setting("Discord:ClientId", "DISCORD_CLIENT_ID");
+        var clientSecret = Setting("Discord:ClientSecret", "DISCORD_CLIENT_SECRET");
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "Discord todavía no está configurado. Configura Discord:ClientId y Discord:ClientSecret.");
+        }
+
+        var redirectUri = ProviderRedirectUri("Discord", "/api/Auth/discord/callback");
+        var state = CrearState("discord");
+
+        var url = "https://discord.com/oauth2/authorize" +
+                  $"?client_id={Uri.EscapeDataString(clientId)}" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  "&response_type=code" +
+                  "&scope=identify%20email" +
+                  $"&state={Uri.EscapeDataString(state)}";
+
+        return Redirect(url);
+    }
+
+    [HttpGet("discord/callback")]
+    [HttpGet("/auth/discord/callback")]
+    public Task<IActionResult> DiscordCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? state,
+        [FromQuery] string? error,
+        [FromQuery(Name = "error_description")] string? errorDescription)
+    {
+        return ProcesarDiscord(code, state, error, errorDescription);
+    }
+
+    private async Task<IActionResult> ProcesarDiscord(
+        string? code,
+        string? state,
+        string? error,
+        string? errorDescription)
+    {
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return VolverAlLogin(
+                $"Discord rechazó el inicio de sesión: {errorDescription ?? error}");
+        }
+
+        if (!ValidarState("discord", state))
+        {
+            return VolverAlLogin(
+                "La sesión de autorización de Discord expiró. Intenta de nuevo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return VolverAlLogin("Discord no envió el código de autorización.");
+        }
+
+        var clientId = Setting("Discord:ClientId", "DISCORD_CLIENT_ID");
+        var clientSecret = Setting("Discord:ClientSecret", "DISCORD_CLIENT_SECRET");
+        var redirectUri = ProviderRedirectUri("Discord", "/api/Auth/discord/callback");
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("Discord todavía no está configurado.");
+        }
+
+        var client = _httpClientFactory.CreateClient();
+
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["redirect_uri"] = redirectUri
+        });
+
+        var tokenRes = await client.PostAsync(
+            "https://discord.com/api/oauth2/token",
+            tokenRequest);
+
+        if (!tokenRes.IsSuccessStatusCode)
+        {
+            var detalle = $"HTTP {(int)tokenRes.StatusCode}";
+            var cuerpo = await tokenRes.Content.ReadAsStringAsync();
+
+            try
+            {
+                using var docError = JsonDocument.Parse(cuerpo);
+                var raiz = docError.RootElement;
+                var partes = new List<string>();
+
+                if (raiz.TryGetProperty("error", out var errorJson))
+                    partes.Add(errorJson.ToString());
+                if (raiz.TryGetProperty("error_description", out var descJson))
+                    partes.Add(descJson.ToString());
+                if (raiz.TryGetProperty("message", out var msgJson))
+                    partes.Add(msgJson.ToString());
+
+                detalle += partes.Count > 0
+                    ? " - " + string.Join(" - ", partes)
+                    : " - respuesta sin detalle";
+            }
+            catch
+            {
+                detalle += " - respuesta no JSON";
+            }
+
+            if (detalle.Length > 300)
+                detalle = detalle[..300];
+
+            return VolverAlLogin(
+                $"No se pudo obtener el token de Discord: {detalle}");
+        }
+
+        using var tokenDoc = JsonDocument.Parse(
+            await tokenRes.Content.ReadAsStringAsync());
+
+        var accessToken =
+            tokenDoc.RootElement.TryGetProperty("access_token", out var tokenProp) &&
+            tokenProp.ValueKind == JsonValueKind.String
+                ? tokenProp.GetString()
+                : null;
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return VolverAlLogin("Discord no proporcionó un token de acceso.");
+        }
+
+        var userReq = new HttpRequestMessage(
+            HttpMethod.Get,
+            "https://discord.com/api/users/@me");
+        userReq.Headers.Authorization =
+            new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var userRes = await client.SendAsync(userReq);
+        if (!userRes.IsSuccessStatusCode)
+        {
+            return VolverAlLogin("No se pudo obtener el perfil de Discord.");
+        }
+
+        using var userDoc = JsonDocument.Parse(
+            await userRes.Content.ReadAsStringAsync());
+
+        var id = userDoc.RootElement.TryGetProperty("id", out var idProp)
+            ? idProp.ToString()
+            : "";
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return VolverAlLogin("Discord no proporcionó el identificador del usuario.");
+        }
+
+        var nombre = "UsuarioDiscord";
+        if (userDoc.RootElement.TryGetProperty("global_name", out var globalName) &&
+            globalName.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(globalName.GetString()))
+        {
+            nombre = globalName.GetString()!;
+        }
+        else if (userDoc.RootElement.TryGetProperty("username", out var username) &&
+                 username.ValueKind == JsonValueKind.String &&
+                 !string.IsNullOrWhiteSpace(username.GetString()))
+        {
+            nombre = username.GetString()!;
+        }
+
+        var email = userDoc.RootElement.TryGetProperty("email", out var emailProp) &&
+                    emailProp.ValueKind == JsonValueKind.String
+            ? emailProp.GetString() ?? ""
+            : "";
+
+        var usuario = await ObtenerOCrearUsuario("Discord", id, nombre, email);
+        await IniciarSesionCookie(usuario, "Discord");
+        return IrAlPerfil();
+    }
+
+    // ================= SLACK (OPENID CONNECT) =================
+    private const string SlackAuthStateCookie = "SlackAuthState";
+    private const string SlackAuthorizationEndpoint = "https://slack.com/openid/connect/authorize";
+    private const string SlackTokenEndpoint = "https://slack.com/api/openid.connect.token";
+    private const string SlackUserInfoEndpoint = "https://slack.com/api/openid.connect.userInfo";
+    private const string SlackKeysEndpoint = "https://slack.com/openid/connect/keys";
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> SlackStatesEnUso = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string State, string Code, string Error, long Expira)> SlackContinuaciones = new();
+
+    private string SlackRedirectUri()
+    {
+        var configurada = Setting("Slack:RedirectUri", "SLACK_REDIRECT_URI");
+
+        return !string.IsNullOrWhiteSpace(configurada)
+            ? configurada
+            : ProviderRedirectUri("Slack", "/api/Auth/slack/callback");
+    }
+
+    private static byte[] FirmaStateSlack(string clientSecret, string payload) =>
+        HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(clientSecret),
+            Encoding.UTF8.GetBytes(payload));
+
+    private static string HuellaStateSlack(string state) =>
+        WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.UTF8.GetBytes(state)));
+
+    private static void LimpiarStatesSlackExpirados()
+    {
+        var ahora = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        foreach (var entrada in SlackStatesEnUso)
+        {
+            if (entrada.Value < ahora)
+                SlackStatesEnUso.TryRemove(entrada.Key, out _);
+        }
+
+        foreach (var entrada in SlackContinuaciones)
+        {
+            if (entrada.Value.Expira < ahora)
+                SlackContinuaciones.TryRemove(entrada.Key, out _);
+        }
+    }
+
+    [HttpGet("slack/login")]
+    public IActionResult SlackLogin()
+    {
+        var clientId = Setting("Slack:ClientId", "SLACK_CLIENT_ID");
+        var clientSecret = Setting("Slack:ClientSecret", "SLACK_CLIENT_SECRET");
+        var redirectUri = SlackRedirectUri();
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin(
+                "Slack todavía no está configurado. Configura Slack:ClientId y Slack:ClientSecret.");
+        }
+
+        // State + nonce + token del navegador + expiración + redirect_uri, firmados con HMAC.
+        var stateAleatorio = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var nonce = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var tokenNavegador = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var expiraUnix = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds();
+        var expira = expiraUnix.ToString(CultureInfo.InvariantCulture);
+        var payload = string.Join("|", stateAleatorio, nonce, tokenNavegador, expira, redirectUri);
+        var stateFirmado =
+            WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(payload)) +
+            "." + WebEncoders.Base64UrlEncode(FirmaStateSlack(clientSecret, payload));
+
+        LimpiarStatesSlackExpirados();
+        SlackStatesEnUso[HuellaStateSlack(stateFirmado)] = expiraUnix;
+
+        Response.Cookies.Append(SlackAuthStateCookie, tokenNavegador, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Path = "/api/Auth/slack",
+            MaxAge = TimeSpan.FromMinutes(10)
+        });
+
+        var url = QueryHelpers.AddQueryString(SlackAuthorizationEndpoint, "response_type", "code");
+        url = QueryHelpers.AddQueryString(url, "scope", "openid profile email");
+        url = QueryHelpers.AddQueryString(url, "response_mode", "query");
+        url = QueryHelpers.AddQueryString(url, "client_id", clientId);
+        url = QueryHelpers.AddQueryString(url, "state", stateFirmado);
+        url = QueryHelpers.AddQueryString(url, "nonce", nonce);
+        url = QueryHelpers.AddQueryString(url, "redirect_uri", redirectUri);
+
+        return Redirect(url);
+    }
+
+    [HttpGet("slack/callback")]
+    [HttpPost("slack/callback")]
+    public async Task<IActionResult> SlackCallback()
+    {
+        static JsonDocument? ParsearJsonSlack(string cuerpo)
+        {
+            try { return JsonDocument.Parse(cuerpo); }
+            catch { return null; }
+        }
+
+        static string? TextoSlack(JsonElement raiz, string nombre) =>
+            raiz.TryGetProperty(nombre, out var valor) && valor.ValueKind == JsonValueKind.String
+                ? valor.GetString()
+                : null;
+
+        static bool RespuestaOkSlack(JsonDocument documento) =>
+            documento.RootElement.TryGetProperty("ok", out var ok) &&
+            ok.ValueKind == JsonValueKind.True;
+
+        var clientId = Setting("Slack:ClientId", "SLACK_CLIENT_ID");
+        var clientSecret = Setting("Slack:ClientSecret", "SLACK_CLIENT_SECRET");
+        var redirectUri = SlackRedirectUri();
+
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+        {
+            return VolverAlLogin("Slack todavía no está configurado.");
+        }
+
+        static string ValorSlack(HttpRequest solicitud, string nombre) =>
+            solicitud.HasFormContentType
+                ? solicitud.Form[nombre].ToString()
+                : solicitud.Query[nombre].ToString();
+
+        var state = ValorSlack(Request, "state");
+        var code = ValorSlack(Request, "code");
+        var error = ValorSlack(Request, "error");
+        var cookieToken = Request.Cookies[SlackAuthStateCookie];
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            BorrarStateSlack();
+            return VolverAlLogin(
+                $"Slack rechazó el inicio de sesión: {error}");
+        }
+
+        // Un POST cross-site (form_post) no adjunta la cookie SameSite=Lax.
+        // Se vuelve al mismo callback por GET, donde el navegador sí la envía.
+        LimpiarStatesSlackExpirados();
+        if (Request.Method == "POST" && string.IsNullOrWhiteSpace(cookieToken))
+        {
+            if (string.IsNullOrWhiteSpace(state) ||
+                !SlackStatesEnUso.ContainsKey(HuellaStateSlack(state)))
+            {
+                BorrarStateSlack();
+                return Unauthorized(new { mensaje = "Solicitud de Slack no válida." });
+            }
+
+            var continuacion = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            SlackContinuaciones[continuacion] = (
+                state,
+                code,
+                error,
+                DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeSeconds());
+
+            return RedirectToAction(nameof(SlackCallback), new { continuacion });
+        }
+
+        var continuacionRecibida = Request.Query["continuacion"].ToString();
+        if (!string.IsNullOrWhiteSpace(continuacionRecibida))
+        {
+            if (!SlackContinuaciones.TryRemove(continuacionRecibida, out var pendiente) ||
+                pendiente.Expira < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+            {
+                BorrarStateSlack();
+                return Unauthorized(new { mensaje = "Solicitud de Slack no válida." });
+            }
+
+            state = pendiente.State;
+            code = pendiente.Code;
+            error = pendiente.Error;
+        }
+
+        if (string.IsNullOrWhiteSpace(state) ||
+            string.IsNullOrWhiteSpace(code) ||
+            string.IsNullOrWhiteSpace(cookieToken))
+        {
+            BorrarStateSlack();
+            return Unauthorized(new { mensaje = "Solicitud de Slack no válida." });
+        }
+
+        var partes = state.Split('.');
+        if (partes.Length != 2)
+        {
+            BorrarStateSlack();
+            return Unauthorized(new { mensaje = "Estado de Slack no válido." });
+        }
+
+        string payload;
+        byte[] firmaRecibida;
+        try
+        {
+            payload = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(partes[0]));
+            firmaRecibida = WebEncoders.Base64UrlDecode(partes[1]);
+        }
+        catch
+        {
+            BorrarStateSlack();
+            return Unauthorized(new { mensaje = "Estado de Slack no válido." });
+        }
+
+        var campos = payload.Split('|', 5);
+        var firmaEsperada = FirmaStateSlack(clientSecret, payload);
+        if (campos.Length != 5 ||
+            !long.TryParse(campos[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var expira) ||
+            expira < DateTimeOffset.UtcNow.ToUnixTimeSeconds() ||
+            !string.Equals(campos[4], redirectUri, StringComparison.Ordinal) ||
+            !CryptographicOperations.FixedTimeEquals(firmaEsperada, firmaRecibida) ||
+            !CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(campos[2]),
+                Encoding.UTF8.GetBytes(cookieToken)))
+        {
+            BorrarStateSlack();
+            return Unauthorized(new { mensaje = "Estado de Slack no válido." });
+        }
+
+        var nonceEsperado = campos[1];
+
+        LimpiarStatesSlackExpirados();
+        if (!SlackStatesEnUso.TryRemove(HuellaStateSlack(state), out _))
+        {
+            BorrarStateSlack();
+            return Unauthorized(new { mensaje = "Estado de Slack no válido." });
+        }
+
+        // El state se consume una sola vez, incluso si fallan las llamadas posteriores.
+        BorrarStateSlack();
+
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+
+        using var contenidoToken = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["code"] = code,
+            ["grant_type"] = "authorization_code",
+            ["redirect_uri"] = redirectUri
+        });
+
+        using var respuestaToken = await client.PostAsync(SlackTokenEndpoint, contenidoToken);
+        if (!respuestaToken.IsSuccessStatusCode)
+        {
+            return StatusCode(502, new { mensaje = "No se pudo completar la autenticación con Slack." });
+        }
+
+        using var tokenDoc = ParsearJsonSlack(await respuestaToken.Content.ReadAsStringAsync());
+        if (tokenDoc is null || !RespuestaOkSlack(tokenDoc))
+        {
+            return StatusCode(502, new { mensaje = "No se pudo completar la autenticación con Slack." });
+        }
+
+        var accessToken = TextoSlack(tokenDoc.RootElement, "access_token");
+        var idToken = TextoSlack(tokenDoc.RootElement, "id_token");
+
+        if (string.IsNullOrWhiteSpace(accessToken) || string.IsNullOrWhiteSpace(idToken))
+        {
+            return StatusCode(502, new { mensaje = "No se pudo completar la autenticación con Slack." });
+        }
+
+        string? idTokenSub = null;
+        string? idTokenNombre = null;
+        string? idTokenEmail = null;
+
+        try
+        {
+            using var respuestaLlaves = await client.GetAsync(SlackKeysEndpoint);
+            if (!respuestaLlaves.IsSuccessStatusCode)
+            {
+                return StatusCode(502, new { mensaje = "No se pudo validar la identidad de Slack." });
+            }
+
+            using var llavesDoc = ParsearJsonSlack(await respuestaLlaves.Content.ReadAsStringAsync());
+            if (llavesDoc is null)
+            {
+                return StatusCode(502, new { mensaje = "No se pudo validar la identidad de Slack." });
+            }
+
+            var parametrosValidacion = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = "https://slack.com",
+                ValidateAudience = true,
+                ValidAudience = clientId,
+                ValidateLifetime = true,
+                RequireExpirationTime = true,
+                RequireSignedTokens = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys =
+                    new Microsoft.IdentityModel.Tokens.JsonWebKeySet(llavesDoc.RootElement.GetRawText())
+                        .GetSigningKeys(),
+                ValidAlgorithms = new[] { "RS256" },
+                ClockSkew = TimeSpan.FromMinutes(2)
+            };
+
+            var validador = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler
+            {
+                MapInboundClaims = false
+            };
+            var principal = validador.ValidateToken(idToken, parametrosValidacion, out _);
+
+            var nonceRecibido = principal.FindFirst("nonce")?.Value;
+            if (string.IsNullOrWhiteSpace(nonceRecibido) ||
+                !CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(nonceEsperado),
+                    Encoding.UTF8.GetBytes(nonceRecibido)))
+            {
+                return Unauthorized(new { mensaje = "Identidad de Slack no válida." });
+            }
+
+            idTokenSub = principal.FindFirst("sub")?.Value;
+            idTokenNombre = principal.FindFirst("name")?.Value;
+            idTokenEmail = principal.FindFirst("email")?.Value;
+        }
+        catch (Exception)
+        {
+            return Unauthorized(new { mensaje = "Identidad de Slack no válida." });
+        }
+
+        using var solicitudPerfil = new HttpRequestMessage(HttpMethod.Post, SlackUserInfoEndpoint);
+        solicitudPerfil.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        solicitudPerfil.Content = new StringContent(
+            string.Empty,
+            Encoding.UTF8,
+            "application/x-www-form-urlencoded");
+
+        using var respuestaPerfil = await client.SendAsync(solicitudPerfil);
+        if (!respuestaPerfil.IsSuccessStatusCode)
+        {
+            return StatusCode(502, new { mensaje = "No se pudo obtener la identidad de Slack." });
+        }
+
+        using var perfilDoc = ParsearJsonSlack(await respuestaPerfil.Content.ReadAsStringAsync());
+        if (perfilDoc is null || !RespuestaOkSlack(perfilDoc))
+        {
+            return StatusCode(502, new { mensaje = "No se pudo obtener la identidad de Slack." });
+        }
+
+        var raiz = perfilDoc.RootElement;
+        var sub = TextoSlack(raiz, "sub") ??
+                  TextoSlack(raiz, "https://slack.com/user_id") ??
+                  idTokenSub;
+
+        if (string.IsNullOrWhiteSpace(sub))
+        {
+            return StatusCode(502, new { mensaje = "No se pudo obtener la identidad de Slack." });
+        }
+
+        var nombre = TextoSlack(raiz, "name");
+        if (string.IsNullOrWhiteSpace(nombre))
+            nombre = TextoSlack(raiz, "given_name");
+        if (string.IsNullOrWhiteSpace(nombre))
+            nombre = idTokenNombre;
+        if (string.IsNullOrWhiteSpace(nombre))
+            nombre = $"Usuario Slack {sub}";
+
+        var email = TextoSlack(raiz, "email") ?? idTokenEmail ?? string.Empty;
+
+        var usuario = await ObtenerOCrearUsuario("Slack", $"slack_{sub}", nombre, email);
+        await IniciarSesionCookie(usuario, "Slack");
+        return IrAlPerfil();
+    }
+
+    private void BorrarStateSlack() =>
+        Response.Cookies.Delete(SlackAuthStateCookie, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Path = "/api/Auth/slack"
+        });
 
     // ================= IDENTIDAD Y LOGOUT =================
 

@@ -1,18 +1,9 @@
 FROM nginx:1.28-alpine
 
-# Página principal
+# Copiar la portada de Red Social encima del index.html predeterminado de Nginx
 COPY index.html /usr/share/nginx/html/index.html
 
-# Callback de OpenIddict
-COPY callback.html /usr/share/nginx/html/callback.html
-
-# Archivos JavaScript (config.js se regenera al arrancar con API_URL)
-COPY js/ /usr/share/nginx/html/js/
-
-# Hoja de estilos de la página principal
-COPY index.css /usr/share/nginx/html/index.css
-
-# Página de Login y sus recursos
+# Copiar página de Login
 COPY login/ /usr/share/nginx/html/login/
 
 # Página de Bienvenida y sus recursos

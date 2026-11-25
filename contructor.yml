@@ -53,18 +53,58 @@ services:
       replicas: ${BACKEND_REPLICAS:-3}
     restart: unless-stopped
     environment:
-      <<: *backend-env
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 5290
+      REDIS_CONNECTION: redis:6379
+      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}"
+      FrontendUrl: "http://localhost:${FRONTEND_PORT:-5500}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-}"
+      DROPBOX_CLIENT_ID: "${DROPBOX_CLIENT_ID:-}"
+      DROPBOX_CLIENT_SECRET: "${DROPBOX_CLIENT_SECRET:-}"
+      FIGMA_CLIENT_ID: "${FIGMA_CLIENT_ID:-}"
+      FIGMA_CLIENT_SECRET: "${FIGMA_CLIENT_SECRET:-}"
+      TWITTER_CLIENT_ID: "${TWITTER_CLIENT_ID:-}"
+      TWITTER_CLIENT_SECRET: "${TWITTER_CLIENT_SECRET:-}"
+      TIKTOK_CLIENT_KEY: "${TIKTOK_CLIENT_KEY:-}"
+      TIKTOK_CLIENT_SECRET: "${TIKTOK_CLIENT_SECRET:-}"
+      TIKTOK_REDIRECT_URI: "${TIKTOK_REDIRECT_URI:-}"
+
     volumes:
       # Claves de Data Protection compartidas: todas las réplicas descifran las
       # mismas cookies (sesión, login, state de OAuth).
       - claves-dataprotection:/root/.aspnet/DataProtection-Keys
-      - ./certificados:/certificados:ro
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+
+    networks:
+      - red-social
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5290' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 20s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - red-social
+
+  migraciones:
+    image: redsocial
+    build:
+      context: ./Tarea4-Red Social grupo777
+      dockerfile: Dockerfile
+    command: ["--migrar"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Context: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-RedsocialDB};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}"
     depends_on:
       redis:
         condition: service_healthy
@@ -137,10 +177,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-RedsocialDB}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-11ye}
-    ports:
-      # Solo desde esta máquina: sirve para `dotnet run` (POSTGRES_HOST_PORT).
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}
     volumes:
       - datos-postgres:/var/lib/postgresql/data
     healthcheck:
