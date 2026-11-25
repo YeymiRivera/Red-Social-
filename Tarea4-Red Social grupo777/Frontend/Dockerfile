@@ -1,6 +1,6 @@
 FROM nginx:1.28-alpine
 
-# Página principal
+# Página principal (sustituye el index.html predeterminado de Nginx)
 COPY index.html /usr/share/nginx/html/index.html
 
 # Callback de OpenIddict
@@ -17,6 +17,9 @@ COPY login/ /usr/share/nginx/html/login/
 
 # Página de Bienvenida y sus recursos
 COPY Bienvenida/ /usr/share/nginx/html/Bienvenida/
+
+# Dar permisos de lectura a todos los archivos y acceso a los directorios
+RUN chmod -R a+rX /usr/share/nginx/html
 
 # Script que escribe js/config.js desde la variable API_URL (nginx ejecuta
 # /docker-entrypoint.d/*.sh antes de arrancar). El sed quita finales de línea CRLF.
