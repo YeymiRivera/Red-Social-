@@ -1,218 +1,331 @@
 # Red Social
 
-API REST desarrollada con ASP.NET Core .NET 10 y PostgreSQL. Permite gestionar usuarios mediante operaciones CRUD, con persistencia de datos en una base de datos PostgreSQL.
+Aplicación web de red social desarrollada con **ASP.NET Core .NET 10**, **PostgreSQL**, **Redis** y un frontend web. El sistema permite gestionar usuarios, autenticación, sesiones y funcionalidades de interacción social.
 
-## Configuración (`.env`)
+La aplicación está preparada para ejecutarse mediante Docker Compose, utilizando imágenes Docker del backend y frontend publicadas en Docker Hub. También incorpora Nginx como balanceador de carga para distribuir las solicitudes entre varias instancias del backend.
 
-Todo se configura en un único archivo `.env` en la raíz. Lo leen **Docker Compose** y también **`dotnet run`** (el backend lo carga solo al arrancar).
+## 1. Requisitos
 
-```bash
-cp .env.example .env   # y completa los secretos
-```
+Antes de iniciar el proyecto, asegúrate de tener instalado:
 
-Variables principales: `BACKEND_PORT=5290`, `FRONTEND_PORT=5500`, `BACKEND_REPLICAS=3`, `BACKEND_URL`, `FRONTEND_URL`, `POSTGRES_*`, `OPENIDDICT_CERT_PASSWORD` y las credenciales de cada proveedor (`GOOGLE_*`, `GITHUB_*`, `DROPBOX_*`, `FIGMA_*`, `TWITTER_*`, `TIKTOK_*`). Los comentarios del archivo explican cada una. Las variables ya definidas en la terminal tienen prioridad sobre el `.env`.
+- Docker.
+- Docker Compose (incluido en Docker Desktop o en Docker Engine con el plugin Compose).
+- Una cuenta de Docker Hub, si deseas publicar tus propias imágenes.
 
-> Mantén `BACKEND_PORT=5290`: las URLs de callback registradas en los proveedores OAuth apuntan a ese puerto.
+## 2. Configuración del archivo `.env`
 
-## Ejecutar en local con `dotnet run`
+Antes de ejecutar cualquiera de los archivos Compose, debes crear el archivo `.env` en la **raíz del proyecto**, en el mismo nivel que `contructor.yml` y `despliegue.yml`.
 
-Requisitos: .NET 10 y una base PostgreSQL. La forma más simple es usar la del compose (publica `127.0.0.1:5433`):
-
-```bash
-docker compose -f contructor.yml up -d postgres
-```
-
-Luego:
-
-```bash
-cd "Tarea4-Red Social grupo777"
-dotnet run
-```
-
-Con `dotnet run` (entorno Development):
-
-- La conexión a PostgreSQL se arma con `POSTGRES_*` del `.env` contra `localhost:5433`.
-- Las migraciones se aplican solas y el cliente OpenIddict se registra al arrancar.
-- Usa los certificados de `certificados/*.pfx` (con `OPENIDDICT_CERT_PASSWORD`); si no existen, usa certificados de desarrollo.
-- Las páginas las sirve el propio backend: <http://localhost:5290/login.html> (también `/login/login.html`, `/Bienvenida/bienvenida.html`, `/callback.html`).
-- Para el flujo completo con el frontend en el 5500 abre `Frontend/` con Live Server (raíz = carpeta `Frontend`) o levanta `docker compose -f contructor.yml up -d frontend`.
-
-Si aparece `address already in use` en el 5290 (por ejemplo, porque el compose está levantado), libéralo con `docker compose -f contructor.yml down` o `fuser -k 5290/tcp`.
-
-## Ejecutar con Docker (Construcción)
-
-```bash
-docker compose -f contructor.yml up -d --build
-docker compose -f contructor.yml ps
-```
-
-Servicios:
-
-- **balanceador:** nginx en el puerto **5290** (`nginx/nginx.conf`), reparte entre las réplicas del backend.
-- **backend:** `BACKEND_REPLICAS` réplicas (3 por defecto) sin puerto publicado; comparten PostgreSQL, Redis (sesión), las claves de Data Protection (volumen) y los certificados de `certificados/`.
-- **frontend:** nginx con los HTML en el puerto **5500**.
-- **migraciones:** job que migra la base y registra el cliente OpenIddict antes de levantar el backend.
-- **redis** y **postgres**.
-
-Cambiar el número de réplicas sin tocar el archivo:
-
-```bash
-docker compose -f contructor.yml up -d --scale backend=5
-```
-
-Comprobar el balanceo (la cabecera `X-Servido-Por` cambia de IP):
-
-```bash
-for i in 1 2 3 4; do curl -sI http://localhost:5290/openapi/v1.json | grep -i x-servido-por; done
-```
-
-Los datos se conservan en el volumen `redsocial-datos-postgres`.
-
-## Consultar la API
-
-Una vez iniciados los servicios, puedes acceder a Scalar desde el navegador:
+La estructura debe quedar de esta manera:
 
 ```text
-http://localhost:5290/scalar
+Red-Social/
+├── .env
+├── .env.example
+├── contructor.yml
+├── despliegue.yml
+├── nginx/
+│   └── nginx.conf
+├── certificados/
+│   ├── signing.pfx
+│   └── encryption.pfx
+└── Tarea4-Red Social grupo777/
 ```
 
-También puedes consultar la especificación OpenAPI:
+Crea el archivo copiando la plantilla:
 
-```text
-http://localhost:5290/openapi/v1.json
+usualmente se debe hacer un cp pero en este caso le envie las claves y el formato que debe seguir a su whattsapp en el numero 67675067 (mucho sixseven) 
 ```
 
-Si modificas `BACKEND_PORT` en `.env`, utiliza el nuevo puerto en las direcciones anteriores. Para el login con proveedores externos se recomienda mantener `5290`, porque las URLs de callback registradas en GitHub, Dropbox y Figma apuntan a ese puerto.
+Abre `.env` y configura tus propios valores. Por ejemplo:
 
-## Inicio de sesión
+```env
+# Puertos
+BACKEND_PORT=5290
+FRONTEND_PORT=5500
 
-La interfaz rediseñada está en:
+# PostgreSQL
+POSTGRES_DB=RedSocialDB
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=tu_clave
 
-```text
-Tarea4-Red Social grupo777/Frontend/login/login.html
-Tarea4-Red Social grupo777/Frontend/login/login.css
-Tarea4-Red Social grupo777/Frontend/login/script.js
+# OpenIddict
+CertificatePassword=tu_contraseña_certificados
+
+# Autenticación externa
+Authentication__Google__ClientId=tu_google_client_id
+Authentication__Google__ClientSecret=tu_google_client_secret
+
+Authentication__GitHub__ClientId=tu_github_client_id
+Authentication__GitHub__ClientSecret=tu_github_client_secret
 ```
 
-El perfil está en `Tarea4-Red Social grupo777/Frontend/Bienvenida/`.
+Si el proyecto utiliza otras integraciones, como Dropbox o Figma, agrega también las variables correspondientes que estén definidas en `.env.example`.
 
-Puedes abrir el login desde:
+**Importante:**
 
-- Backend/Nginx: <http://localhost:5290/login.html>
-- Contenedor del frontend: <http://localhost:5500/login/login.html>
+- No compartas tu archivo `.env` públicamente.
+- No reemplaces las credenciales de ejemplo por credenciales reales dentro de `.env.example`.
+- Cada integrante debe crear su propio `.env`.
+- Las contraseñas y variables deben coincidir con las utilizadas por la configuración de los contenedores.
+- La carpeta `certificados/` debe contener los certificados PFX válidos que utiliza OpenIddict. La contraseña configurada debe corresponder a esos archivos.
 
-GitHub, Dropbox, Figma y X (Twitter) ya están configurados en `appsettings.Development.json` (ejecución local) y `appsettings.Production.json` (Docker). Google tiene el **Client ID** configurado, pero el **Client Secret** no se guarda en el repositorio porque GitHub bloquea los secretos publicados.
+Los archivos `.env` y sus credenciales no deben publicarse en GitHub.
 
-Las URLs de callback registradas en los portales de los proveedores son:
+## 3. Ejecutar utilizando las imágenes de Docker Hub
 
-```text
-http://localhost:5290/signin-google
-http://localhost:5290/auth/twitter/callback
+Esta es la forma recomendada para ejecutar el proyecto en otro equipo.
+
+Las imágenes publicadas son:
+
+| Componente | Imagen |
+|---|---|
+| Backend | `juliethhflores/redsocial` |
+| Frontend | `juliethhflores/redsocial-frontend` |
+
+Reemplaza `TU_USUARIO_DOCKERHUB` por el usuario propietario de las imágenes y utiliza las etiquetas que realmente hayas publicado.
+
+### 3.1. Descargar las imágenes
+
+Desde la raíz del proyecto, ejecuta:
+
+```bash
+como indica en el .env que le mande se debe cambiar en las variables de entorno el nombre de las imagenes ya que de forma local se llaman redsocial y redsocial-frontend pero en
+docker hub juliethhflores/redsocial y juliethhflores/redsocial-frontend
+Buscar esta parte en el .env que le comparti
+# ----- Imágenes (solo despliegue.yml) ------------------------------------------
+# Local: redsocial / redsocial-frontend con PULL_POLICY=never
+# Docker Hub: TU_USUARIO/redsocial:1.0 con PULL_POLICY=always
+BACKEND_IMAGE=redsocial <---Cambiar 
+FRONTEND_IMAGE=redsocial-frontend   <----Cambiar 
+PULL_POLICY=never
+en caso de no cambiar esto dara errores debido a que no encontraria las imagenes en docker
+docker compose --env-file .env -f despliegue.yml pull
 ```
 
-### Credenciales de los proveedores
+Este comando descarga las imágenes definidas en `despliegue.yml` desde Docker Hub.
 
-Todas van en el `.env` (no se guardan en `appsettings*.json`). En Docker, `docker compose ... up -d` vuelve a leer el `.env`.
-
-### TikTok
-
-TikTok no acepta `localhost`. Además de `TIKTOK_CLIENT_KEY` y `TIKTOK_CLIENT_SECRET`, define `TIKTOK_REDIRECT_URI` con una URL **HTTPS pública** que llegue al nginx del 5290 (por ejemplo `ngrok http 5290`) y que sea idéntica a la registrada en TikTok Developers, con barra final: `https://<tu-url>/auth/tiktok/callback/`. Detalle en `Tarea4-Red Social grupo777/docs/TIKTOK_SETUP.md`.
-
-## Arrancar desde la imagen local (Despliegue)
-
-Después de construir la imagen `redsocial`, puedes utilizar `despliegue.yml` para levantar los servicios sin volver a construir el backend.
+### 3.2. Iniciar los servicios
 
 Ejecuta:
 
 ```bash
-docker compose -f despliegue.yml up -d
+docker compose --env-file .env -f despliegue.yml up -d
 ```
 
-Este archivo utiliza las imágenes `redsocial` y `redsocial-frontend` previamente construidas con `contructor.yml` (`BACKEND_IMAGE`, `FRONTEND_IMAGE` y `PULL_POLICY` en el `.env`). Sigue necesitando junto al archivo las carpetas `nginx/` y `certificados/`, pero no el código fuente.
+Docker Compose iniciará los servicios definidos en el archivo:
 
-Para comprobar los contenedores:
+- **Backend:** API desarrollada con ASP.NET Core.
+- **Frontend:** interfaz web de la aplicación.
+- **PostgreSQL:** base de datos principal.
+- **Redis:** servicio de almacenamiento en memoria.
+- **Migraciones:** servicio encargado de aplicar las migraciones de Entity Framework Core.
+- **Nginx:** balanceador de carga que distribuye las solicitudes entre las instancias del backend.
+
+El servicio backend depende de que las migraciones finalicen correctamente antes de iniciar.
+
+### 3.3. Comprobar el estado
 
 ```bash
-docker compose -f despliegue.yml ps
+docker compose --env-file .env -f despliegue.yml ps
 ```
 
-## Publicar la imagen en Docker Hub
-
-Si deseas utilizar la imagen en otro equipo, primero debes etiquetarla con tu usuario de Docker Hub:
+Para consultar los registros:
 
 ```bash
-docker tag redsocial TU_USUARIO/redsocial:1.0
+docker compose --env-file .env -f despliegue.yml logs -f
 ```
 
-Inicia sesión:
+Para consultar específicamente los errores de Nginx:
+
+```bash
+docker compose --env-file .env -f despliegue.yml logs balanceador
+```
+
+### 3.4. Acceder a la aplicación
+
+Utiliza los puertos definidos en tu archivo `.env`.
+
+- Frontend: `http://localhost:5500`
+- Backend: utiliza el puerto publicado por el balanceador, según la configuración de `BACKEND_PORT`.
+
+## 4. Construir las imágenes con `contructor.yml`
+
+Este archivo permite construir las imágenes a partir del código fuente y los Dockerfile del proyecto.
+
+Se utiliza principalmente cuando se realizan cambios en el backend o frontend y se necesita generar nuevamente las imágenes.
+
+Desde la raíz del proyecto, ejecuta:
+
+```bash
+docker compose --env-file .env -f contructor.yml build
+```
+
+Para construir y levantar los servicios directamente:
+
+```bash
+docker compose --env-file .env -f contructor.yml up -d --build
+```
+
+Este archivo utiliza las imágenes locales generadas durante la construcción.
+
+### 4.1. Ejecutar varias instancias del backend
+
+El proyecto permite levantar varias instancias del servicio backend para distribuir la carga mediante Nginx.
+
+Por ejemplo, para iniciar cuatro instancias:
+
+```bash
+docker compose --env-file .env -f contructor.yml up -d --build --scale backend=4
+```
+
+Para iniciar tres instancias:
+
+```bash
+docker compose --env-file .env -f contructor.yml up -d --build --scale backend=3
+```
+
+Nginx actúa como balanceador y distribuye las solicitudes entre las instancias disponibles.
+
+**Importante:** el servicio backend debe estar configurado para permitir escalado. Para ello, no debe tener un `container_name` fijo ni publicar directamente el mismo puerto del host en cada réplica. Debe utilizar `expose` para comunicar su puerto interno a Nginx.
+
+Para comprobar las instancias:
+
+```bash
+docker compose --env-file .env -f contructor.yml ps
+```
+
+También puedes cambiar el número de instancias sin reconstruir las imágenes:
+
+```bash
+docker compose --env-file .env -f contructor.yml up -d --scale backend=2
+```
+
+## 5. Publicar las imágenes en Docker Hub
+
+Cuando se realicen modificaciones y se construyan nuevas imágenes, estas pueden publicarse en Docker Hub para que otros integrantes puedan utilizarlas.
+
+Primero, inicia sesión:
 
 ```bash
 docker login
 ```
 
-Publica la imagen:
+Etiqueta las imágenes locales:
 
 ```bash
-docker push TU_USUARIO/redsocial:1.0
+docker tag redsocial TU_USUARIO_DOCKERHUB/redsocial:latest
+docker tag redsocial-frontend TU_USUARIO_DOCKERHUB/redsocial-frontend:latest
 ```
 
-En el `.env`, utiliza la imagen publicada (publica también `redsocial-frontend` de la misma forma):
-
-```env
-BACKEND_IMAGE=TU_USUARIO/redsocial:1.0
-FRONTEND_IMAGE=TU_USUARIO/redsocial-frontend:1.0
-PULL_POLICY=always
-```
-
-De esta manera, Docker podrá descargar las imágenes desde Docker Hub al momento del despliegue.
-
-## Detener los servicios
-
-Para detener y eliminar los contenedores y la red del proyecto, ejecuta:
+Publica ambas imágenes:
 
 ```bash
-docker compose -f contructor.yml down
+docker push TU_USUARIO_DOCKERHUB/redsocial:latest
+docker push TU_USUARIO_DOCKERHUB/redsocial-frontend:latest
 ```
 
-Los datos de PostgreSQL se conservan porque están almacenados en un volumen nombrado.
+Después de publicar las imágenes, los demás integrantes podrán descargarlas ejecutando:
 
-**Importante:** no utilices `down -v` si deseas conservar la información de la base de datos.
+```bash
+docker compose --env-file .env -f despliegue.yml pull
+```
 
-## Archivos y credenciales
+Y levantar la aplicación con:
 
-El proyecto utiliza los siguientes archivos:
+```bash
+docker compose --env-file .env -f despliegue.yml up -d
+```
 
-- `contructor.yml`: configuración para construir las imágenes y levantar los servicios.
-- `nginx/nginx.conf`: balanceador del backend (puerto 5290).
-- `certificados/`: `signing.pfx` y `encryption.pfx` de OpenIddict (no se suben a Git).
-- `despliegue.yml`: configuración para ejecutar una imagen previamente construida.
-- `.env`: contiene las credenciales y variables de entorno utilizadas por Docker Compose.
-- `.env.example`: plantilla de las variables necesarias para ejecutar el proyecto.
-- `Dockerfile`: instrucciones para construir la imagen del backend.
+El archivo `despliegue.yml` debe utilizar las imágenes de Docker Hub mediante la propiedad `image`, sin incluir `build`.
 
-El archivo `.env` está excluido de Git y Docker mediante `.gitignore` y `.dockerignore`. Únicamente se comparte `.env.example`, para que otros usuarios puedan configurar sus propias credenciales.
+## 6. Problemas de permisos con Nginx
 
-## Verificación
+En algunos equipos Linux, Nginx puede presentar errores relacionados con los permisos de lectura de los archivos montados desde el proyecto.
 
-Para comprobar el funcionamiento del proyecto:
+Si aparece un error como `Permission denied` al iniciar el contenedor del balanceador, primero revisa los registros:
 
-1. Construir la imagen del backend.
-2. Verificar que los contenedores de la API y PostgreSQL estén activos.
-3. Acceder a Scalar y consultar los endpoints.
-4. Probar las operaciones CRUD de usuarios.
-5. Reiniciar los contenedores y comprobar que los datos continúan almacenados en PostgreSQL.
-6. Verificar el despliegue utilizando la imagen previamente construida.
+```bash
+docker compose --env-file .env -f despliegue.yml logs balanceador
+```
 
-##Tablas
+Comprueba que el archivo de configuración exista y tenga permisos de lectura:
 
-Yeymi Miguel Rivera Castillo
-Usuarios
-Seguidores
-Usuarios/Publicaciones
-Usuario/sesion
-##Metodos de sesion
-Yeymi Miguel Rivera Castillo
-Google
-Github
+```bash
+ls -l nginx/
+ls -l nginx/nginx.conf
+```
 
+Si el archivo existe, pero no tiene permisos suficientes, puedes corregirlos con:
 
+```bash
+chmod 755 nginx
+chmod 644 nginx/nginx.conf
+```
+
+Después, reinicia el servicio:
+
+```bash
+docker compose --env-file .env -f despliegue.yml restart balanceador
+```
+
+Si estás utilizando `contructor.yml`, sustituye el nombre del archivo en los comandos anteriores.
+
+**Recomendaciones:**
+
+- Comprueba que `nginx/nginx.conf` sea un archivo y no un directorio.
+- Verifica que el volumen esté montado correctamente en `/etc/nginx/nginx.conf`.
+- Conserva el montaje de solo lectura (`:ro`) para el archivo de configuración.
+- No utilices `chmod 777` como solución general, ya que concede permisos excesivos.
+- Si el error menciona otra ruta, como `/var/cache/nginx` o `/var/run`, revisa los permisos de esa ruta y la configuración del contenedor antes de modificarlos.
+
+## 7. Detener los servicios
+
+Para detener los contenedores y eliminar la red creada por Docker Compose:
+
+Con `despliegue.yml`:
+
+```bash
+docker compose --env-file .env -f despliegue.yml down
+```
+
+Con `contructor.yml`:
+
+```bash
+docker compose --env-file .env -f contructor.yml down
+```
+
+**Importante:** no utilices `down -v` si deseas conservar los datos almacenados en PostgreSQL.
+
+Los datos se conservan en el volumen nombrado `datos-postgres`, siempre que no se elimine dicho volumen.
+
+## 8. Archivos importantes
+
+| Archivo o directorio | Descripción |
+|---|---|
+| `.env` | Variables de entorno y credenciales locales. |
+| `.env.example` | Plantilla para crear el archivo `.env`. |
+| `contructor.yml` | Construcción de imágenes y ejecución de servicios desde el código fuente. |
+| `despliegue.yml` | Ejecución de las imágenes publicadas en Docker Hub. |
+| `nginx/nginx.conf` | Configuración del balanceador de carga. |
+| `certificados/` | Certificados utilizados por OpenIddict. |
+| `Dockerfile` | Instrucciones de construcción de las imágenes. |
+
+## 9. Verificación del funcionamiento
+
+Para comprobar que la aplicación funciona correctamente:
+
+1. Crear el archivo `.env` en la raíz del proyecto.
+2. Configurar las credenciales y los puertos.
+3. Verificar que la carpeta `certificados/` contenga los certificados válidos.
+4. Descargar las imágenes desde Docker Hub utilizando `despliegue.yml`.
+5. Iniciar los servicios con Docker Compose.
+6. Comprobar que PostgreSQL y Redis estén funcionando.
+7. Verificar que el servicio de migraciones finalice correctamente.
+8. Comprobar que las instancias del backend estén activas.
+9. Verificar que Nginx esté distribuyendo las solicitudes.
+10. Acceder al frontend y probar las funcionalidades de la aplicación.
+
+---
+
+**Nota:** Para ejecutar el proyecto en otro equipo no es necesario reconstruir las imágenes. Basta con disponer de los archivos Compose, `.env`, la configuración de Nginx y los certificados necesarios, y descargar las imágenes publicadas en Docker Hub.
