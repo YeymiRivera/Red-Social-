@@ -272,6 +272,24 @@ body::before {
     box-shadow: 0 14px 34px rgba(37, 54, 200, 0.35);
 }
 
+.btn-discord {
+    background: linear-gradient(135deg, #404eed, #5865f2);
+    box-shadow: 0 10px 30px rgba(88, 101, 242, 0.22);
+}
+
+.btn-discord:hover {
+    box-shadow: 0 14px 34px rgba(88, 101, 242, 0.35);
+}
+
+.btn-slack {
+    background: linear-gradient(135deg, #3f0e40, #4a154b);
+    box-shadow: 0 10px 30px rgba(74, 21, 75, 0.22);
+}
+
+.btn-slack:hover {
+    box-shadow: 0 14px 34px rgba(74, 21, 75, 0.35);
+}
+
 .perfil {
     text-align: center;
 }
